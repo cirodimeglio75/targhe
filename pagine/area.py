@@ -106,9 +106,10 @@ def concessionaria(pratiche: List[Dict[str, Any]], plafond: Dict[str, Any],
         dentro.append("<div class=carta><p class=gruppo>Da saldare</p>%s</div>"
                       % "".join(
                           "<div class=riga><span class=che>Nota della "
-                          "settimana %s</span><span class=quanto>%s €</span>"
-                          "</div>" % (_e(n.get("settimana", "")),
-                                      _e(numero(n.get("totale", 0))))
+                          "settimana %s</span><span class=quanto>%s € · "
+                          "<a href='/nota/%s.pdf'>PDF</a></span></div>"
+                          % (_e(n.get("settimana", "")),
+                             _e(numero(n.get("totale", 0))), _e(n.get("id", "")))
                           for n in da_saldare))
 
     dentro.append("<div class=carta><p class=gruppo>Le tue pratiche</p>%s</div>"
@@ -143,10 +144,12 @@ def amministrazione(conti_plafond: List[Dict[str, Any]],
             "<form action=/area/plafond method=post class=carica>"
             "<input type=hidden name=concessionaria value='%s'>"
             "<input name=plafond inputmode=decimal placeholder='Plafond €' "
+            "value='%s'>"
+            "<input name=posta type=email placeholder='Posta per le note' "
             "value='%s'><button>Salva</button></form>"
             % (_e(c["nome"]), _e(numero(c["usato"])),
                _e(numero(c["plafond"])), _e(c["concessionaria"]),
-               _e(numero(c["plafond"]))))
+               _e(numero(c["plafond"])), _e(c.get("posta", ""))))
         if pronte:
             righe.append(
                 "<form action=/area/nota method=post class=carica>"
@@ -163,19 +166,21 @@ def amministrazione(conti_plafond: List[Dict[str, Any]],
             if n.get("saldata"):
                 voci.append("<div class=riga><span class=che>%s · %s</span>"
                             "<span class=quanto><span class=si>saldata</span>"
-                            "</span></div>"
+                            " · <a href='/nota/%s.pdf'>PDF</a></span></div>"
                             % (_e(n.get("concessionaria", "")),
-                               _e(n.get("settimana", ""))))
+                               _e(n.get("settimana", "")), _e(n.get("id", ""))))
             else:
                 voci.append(
                     "<div class=riga><span class=che>%s · %s</span>"
-                    "<span class=quanto>%s €</span></div>"
+                    "<span class=quanto>%s € · <a href='/nota/%s.pdf'>PDF</a>"
+                    "</span></div>"
                     "<form action=/area/saldo method=post class=carica>"
                     "<input type=hidden name=nota value='%s'>"
                     "<button>Segna saldata</button></form>"
                     % (_e(n.get("concessionaria", "")),
                        _e(n.get("settimana", "")),
-                       _e(numero(n.get("totale", 0))), _e(n.get("id", ""))))
+                       _e(numero(n.get("totale", 0))), _e(n.get("id", "")),
+                       _e(n.get("id", ""))))
         dentro.append("<div class=carta><p class=gruppo>Note di saldo</p>%s"
                       "</div>" % "".join(voci))
 
@@ -191,6 +196,8 @@ def amministrazione(conti_plafond: List[Dict[str, Any]],
         "<input name=nome placeholder='Nome da mostrare'>"
         "<input name=concessionaria placeholder='Concessionaria: id breve, "
         "es. rossi'>"
+        "<input name=posta type=email placeholder='Posta della "
+        "concessionaria'>"
         "<button name=ruolo value=concessionaria>Crea concessionaria</button>"
         "</form>"
         "<p class=nota-riga>Il conto di una concessionaria porta con sé il "

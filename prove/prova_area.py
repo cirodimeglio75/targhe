@@ -35,7 +35,7 @@ os.environ["BASE_VEICOLI"] = "http://127.0.0.1:%d" % PORTA_FINTA
 os.environ["TOKEN_VEICOLI"] = "finto"
 
 import server                                            # noqa: E402
-from veicoli import conteggio, conti, pratiche           # noqa: E402
+from veicoli import conteggio, conti, posta, pratiche    # noqa: E402
 
 GUASTI = []
 DOVE = Path("/tmp/prova-area-%d" % os.getpid())
@@ -51,6 +51,19 @@ def deve(condizione, cosa):
 class NonSeguire(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, *a):
         return None
+
+
+def chiedi_byte(strada, chiave=""):
+    """Come `chiedi`, ma senza tradurre: un PDF non e' testo, e leggerlo
+    come tale lo rovina prima ancora di guardarlo."""
+    r = urllib.request.Request("http://127.0.0.1:%d%s" % (PORTA, strada))
+    if chiave:
+        r.add_header("Cookie", "chiave=" + chiave)
+    try:
+        with urllib.request.urlopen(r, timeout=10) as risposta:
+            return risposta.status, risposta.read(), risposta
+    except urllib.error.HTTPError as e:
+        return e.code, e.read(), e
 
 
 def chiedi(strada, chiave="", dati=None, tipo=None, segui=True, origine=None):
@@ -101,7 +114,8 @@ def main():
     threading.Thread(target=casa.serve_forever, daemon=True).start()
     time.sleep(0.3)
 
-    conti.salva_concessionaria(DOVE, "rossi", "Autosalone Rossi", 2000)
+    conti.salva_concessionaria(DOVE, "rossi", "Autosalone Rossi", 2000,
+                               "rossi@example.it")
     conti.salva_concessionaria(DOVE, "bianchi", "Bianchi Auto", 2000)
     conti.crea(DOVE, "rossi", "parolalunga1", "concessionaria", "rossi",
                "Autosalone Rossi")
@@ -207,11 +221,52 @@ def main():
     dati, tipo = modulo({"concessionaria": "rossi"})
     codice, corpo, _ = chiedi("/area/nota", admin, dati, tipo)
     deve(codice == 200 and "Nota emessa" in corpo, "la nota si emette")
+    # Il banco gira senza posta configurata, ed e' il caso che conta: chi
+    # emette deve LEGGERE che non e' partita, non crederlo.
+    deve("resta scaricabile" in corpo,
+         "e se la posta non è configurata lo dice, invece di far finta")
     nota = conteggio.note(DOVE / "note", "rossi")[0]
     deve(nota["totale"] == 670.0 and len(nota["righe"]) == 1,
          "e contiene quella pratica lì, con quel totale lì")
     codice, corpo, _ = chiedi("/area", rossi)
     deve("Da saldare" in corpo, "la concessionaria la vede da saldare")
+    print("\nla nota in PDF")
+    codice, dato, risposta = chiedi_byte("/nota/%s.pdf" % nota["id"], rossi)
+    deve(codice == 200
+         and risposta.headers.get("Content-Type") == "application/pdf",
+         "la concessionaria scarica il PDF della sua nota")
+    deve(dato.startswith(b"%PDF-1.4"), "ed è un PDF vero")
+    dove_pdf = DOVE / "nota-provata.pdf"
+    dove_pdf.write_bytes(dato)
+    # Si legge col lettore di PDF, non guardando i byte: quel che conta e'
+    # che il documento si APRA e dica le cose giuste a chi lo riceve.
+    import pymupdf
+    letto = "\n".join(p.get_text() for p in pymupdf.open(dove_pdf))
+    deve("Nota di saldo" in letto and "670,00" in letto
+         and "Autosalone Rossi" in letto,
+         "e un lettore di PDF ci legge dentro nome, righe e totale")
+    deve("entro lunedì" in letto,
+         "con scritto entro quando si salda, come vuole l'accordo")
+    codice, corpo, _ = chiedi("/nota/%s.pdf" % nota["id"], bianchi)
+    deve(codice == 404, "un'altra concessionaria non lo apre")
+    codice, corpo, _ = chiedi("/nota/%s.pdf" % nota["id"])
+    deve(codice == 404, "e chi non è entrato nemmeno")
+
+    print("\nla posta")
+    busta = {}
+    partita = posta.manda("rossi@example.it", "Nota di saldo", "Eccola.",
+                          b"%PDF-1.4 finto", "nota.pdf",
+                          spedizioniere=lambda m: busta.update({"m": m}))
+    allegati = list(busta["m"].iter_attachments())
+    deve(partita and allegati and allegati[0].get_filename() == "nota.pdf"
+         and allegati[0].get_content_type() == "application/pdf",
+         "la busta porta il PDF attaccato, col nome giusto")
+    try:
+        posta.manda("", "x", "y")
+        deve(False, "senza indirizzo deve fermarsi")
+    except posta.PostaRifiutata as e:
+        deve("non ha un indirizzo" in e.utente,
+             "senza indirizzo lo dice, e dice cosa fare")
     dati, tipo = modulo({"nota": nota["id"]})
     codice, corpo, _ = chiedi("/area/saldo", admin, dati, tipo)
     deve("plafond è tornato libero" in corpo, "segnata saldata")

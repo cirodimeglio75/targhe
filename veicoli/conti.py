@@ -175,7 +175,7 @@ def concessionarie(cartella: Path) -> Dict[str, Any]:
 
 
 def salva_concessionaria(cartella: Path, identificativo: str, nome: str,
-                         plafond: float) -> Dict[str, Any]:
+                         plafond: float, posta: str = "") -> Dict[str, Any]:
     """Nome e plafond di una concessionaria. Il plafond lo decide
     l'amministrazione, ed e' il tetto di quanto puo' restare da saldare."""
     identificativo = (identificativo or "").strip().lower()
@@ -187,6 +187,12 @@ def salva_concessionaria(cartella: Path, identificativo: str, nome: str,
     dentro = tutte.get(identificativo, {})
     dentro.update({"id": identificativo, "nome": nome or identificativo,
                    "plafond": max(0.0, float(plafond or 0))})
+    # L'indirizzo si aggiorna solo se ne arriva uno: passare vuoto vuol
+    # dire «non lo sto cambiando», non «cancellalo». Cancellare per
+    # omissione e' il modo piu' rapido di smettere di mandare le note
+    # credendo di aver salvato il plafond.
+    if posta.strip():
+        dentro["posta"] = posta.strip()
     tutte[identificativo] = dentro
     _scrivi(Path(cartella) / "concessionarie.json", tutte)
     return dentro

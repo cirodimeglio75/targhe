@@ -57,7 +57,7 @@ time.tzset()
 from pagine import area as veste_area        # noqa: E402
 from pagine import pratica as veste_pratica  # noqa: E402
 from pagine import scheda as veste           # noqa: E402
-from veicoli import cliente, conteggio, conti, pratiche   # noqa: E402
+from veicoli import cliente, conteggio, conti, posta, pratiche  # noqa: E402
 
 
 # Quanto corpo si accetta in una volta. Il documento singolo ha il suo
@@ -177,6 +177,14 @@ class Porta(BaseHTTPRequestHandler):
             return self._rimanda("/entra", self._biscotto("", spegni=True))
         if strada == "/area":
             return self._area()
+        if strada.startswith("/nota/") and strada.endswith(".pdf"):
+            try:
+                return self._nota_in_pdf(
+                    strada[len("/nota/"):-len(".pdf")])
+            except conteggio.ConteggioRifiutato as e:
+                if self._vuole_json():
+                    return self._json({"errore": e.utente}, 404)
+                return self._pagina(veste_area.entra(e.utente), 404)
 
         if strada == "/pratica/nuova":
             tipo = (campi.get("tipo") or [""])[0]
@@ -408,6 +416,33 @@ class Porta(BaseHTTPRequestHandler):
                 return self._pagina(veste.ricerca(e.utente), 404)
         return self._pratica(identificativo, "Documento arrivato.")
 
+    def _nota_in_pdf(self, identificativo: str) -> None:
+        """Il PDF di una nota, a chi ha titolo di leggerlo.
+
+        L'amministrazione tutte; una concessionaria **solo le sue**. Come
+        per le pratiche, a chi non ha titolo si risponde «non esiste».
+        """
+        conto = self._conto()
+        nota = conteggio.leggi(self.server.note, identificativo)
+        suo = (conto or {}).get("ruolo") == "concessionaria" and \
+            conto.get("concessionaria") == nota.get("concessionaria")
+        if not conto or not (conto.get("ruolo") in ("agenzia",
+                                                    "amministrazione") or suo):
+            raise conteggio.ConteggioRifiutato("Questa nota non esiste.")
+        dato = conteggio.carta(self.server.note, identificativo)
+        self.send_response(200)
+        self.send_header("Content-Type", "application/pdf")
+        self.send_header("Content-Length", str(len(dato)))
+        self.send_header("Content-Disposition",
+                         "inline; filename=\"nota-%s.pdf\""
+                         % nota.get("settimana", "saldo"))
+        self.send_header("Cache-Control", "no-store, private")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Content-Security-Policy",
+                         "default-src 'none'; sandbox")
+        self.end_headers()
+        self.wfile.write(dato)
+
     def _documento(self, identificativo: str, chiave: str) -> None:
         """Un documento caricato, rimandato a chi ha il diritto di vederlo.
 
@@ -498,12 +533,33 @@ class Porta(BaseHTTPRequestHandler):
             except ValueError:
                 return self._area("Il plafond dev'essere un numero.")
             conti.salva_concessionaria(self.server.dati, quale,
-                                       gia.get("nome", quale), quanto)
+                                       gia.get("nome", quale), quanto,
+                                       str(pezzi.get("posta") or ""))
             return self._area("Plafond aggiornato.")
         if strada == "/area/nota":
+            quale = str(pezzi.get("concessionaria") or "")
+            dentro = conti.concessionaria(self.server.dati, quale)
             nota = conteggio.emetti(self.server.note, self.server.pratiche,
-                                    str(pezzi.get("concessionaria") or ""))
-            return self._area("Nota emessa: %.2f €." % nota["totale"])
+                                    quale, dentro.get("nome", quale))
+            # Il PDF c'e' comunque: la posta e' il modo di farlo arrivare,
+            # non il posto dove vive. Se non parte, la nota resta nell'area
+            # della concessionaria e lo si dice, invece di far finta.
+            detto = "Nota emessa: %.2f €." % nota["totale"]
+            try:
+                partita = posta.manda(
+                    dentro.get("posta", ""),
+                    "Nota di saldo — settimana %s" % nota["settimana"],
+                    "In allegato la nota di saldo della settimana %s, "
+                    "di %.2f €.\n\nDa saldare entro lunedì %s.\n"
+                    % (nota["settimana"], nota["totale"],
+                       conteggio.entro_quando(nota["quando"])),
+                    conteggio.carta(self.server.note, nota["id"]),
+                    "nota-%s.pdf" % nota["settimana"])
+                detto += (" Mandata per posta a %s." % dentro.get("posta")
+                          if partita else "")
+            except posta.PostaRifiutata as e:
+                detto += " " + e.utente
+            return self._area(detto)
         if strada == "/area/saldo":
             conteggio.segna_saldata(self.server.note, self.server.pratiche,
                                     str(pezzi.get("nota") or ""))
@@ -515,7 +571,8 @@ class Porta(BaseHTTPRequestHandler):
                     self.server.dati, quale,
                     str(pezzi.get("nome") or quale),
                     conti.concessionaria(self.server.dati,
-                                         quale).get("plafond", 0))
+                                         quale).get("plafond", 0),
+                    str(pezzi.get("posta") or ""))
             conti.crea(self.server.dati, str(pezzi.get("utente") or ""),
                        str(pezzi.get("parola") or ""),
                        str(pezzi.get("ruolo") or "concessionaria"),

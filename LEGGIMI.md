@@ -35,7 +35,7 @@ I due banchi, che girano da soli:
     python3 prove/prova_cliente.py   # il cervello: 35 controlli
     python3 prove/prova_pagina.py    # la pagina: 26 controlli
     python3 prove/prova_pratiche.py  # i documenti: 19 controlli
-    python3 prove/prova_area.py      # il giro intero: 33 controlli
+    python3 prove/prova_area.py      # il giro intero: 41 controlli
 
 Controllano le cose che sbagliate si pagano: la memoria che non ricorda
 (soldi), il «non risulta» che sembra un guasto (recensioni), il token
@@ -56,7 +56,9 @@ come testo (guai).
 | `veicoli/passaggio.py` | il listino del passaggio di proprietà, dai kW. **Due colonne: solo `pubblico` esce di qui** |
 | `veicoli/pratiche.py` | quali documenti servono per ogni pratica, dove finiscono, e chi può vederli |
 | `veicoli/conti.py` | chi entra: concessionaria, agenzia, amministrazione |
-| `veicoli/conteggio.py` | plafond, conteggio del sabato, nota di saldo |
+| `veicoli/conteggio.py` | plafond, conteggio del sabato, nota di saldo e il suo PDF |
+| `veicoli/pdf.py` | un PDF scritto a mano, senza librerie |
+| `veicoli/posta.py` | la nota che arriva per posta, col PDF attaccato |
 | `pagine/area.py` | le tre aree, una per mestiere |
 | `pagine/pratica.py` | l'elenco dei documenti con le spunte, e i tasti per fotografare |
 | `strumenti/finto_openapi.py` | il fornitore finto del banco, che conta le domande |
@@ -213,10 +215,37 @@ quando non ne trova nessuno:
       conti.crea(Path('dati'), 'admin', 'parolalunga', 'amministrazione', \
                  nome='Amministrazione')"
 
+### La nota di saldo è un documento
+
+Quando l'amministrazione emette la nota, nasce anche il suo **PDF** — un
+foglio A4 con la concessionaria, le pratiche riga per riga, il totale e
+*«Da saldare entro lunedì …»*. Si scarica dall'area (della concessionaria,
+o dell'amministrazione) e, se la posta è configurata, **parte per posta
+con il PDF attaccato**.
+
+Il PDF si fabbrica **una volta sola**, quando la nota nasce, e poi non si
+rifà: rigenerarlo a ogni richiesta vorrebbe dire che una modifica al
+programma cambia una carta già mandata a un cliente.
+
+`veicoli/pdf.py` lo scrive a mano, senza librerie: per venti righe di
+testo su un foglio, una libreria di PDF è un pacchetto grosso da tenere
+aggiornato con le sue falle. Se un giorno servirà un documento più ricco,
+quello è il momento di prendere una libreria — non di far crescere quel
+file.
+
+**La posta si configura dall'ambiente**, e se manca il conteggio non
+fallisce: la nota resta scaricabile e l'amministrazione **legge** che non
+è partita, invece di crederlo.
+
+    SERVER_POSTA=smtp.esempio.it   PORTA_POSTA=587
+    UTENTE_POSTA=...               PAROLA_POSTA=...
+    DA_POSTA="Targhe <note@esempio.it>"
+
+L'indirizzo della concessionaria si mette dall'area amministrazione. Se è
+vuoto la nota non parte, e lo si legge.
+
 ### Cosa manca ancora, di questo giro
 
-- **la nota di saldo è una schermata, non un documento**: se deve arrivare
-  per posta o come PDF, va detto;
 - **nessuno sollecita il lunedì**: il plafond resta occupato finché non si
   salda, e quello frena da solo, ma un promemoria non c'è;
 - **i documenti restano sul nostro disco**: non c'è un modo per l'agenzia

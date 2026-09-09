@@ -28,6 +28,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from . import conti as registro
+from . import pdf
 from . import pratiche as pr
 
 
@@ -58,6 +59,7 @@ def quanto_resta(cartella_conti: Path, cartella_pratiche: Path,
     usato = esposizione(cartella_pratiche, concessionaria)
     return {"concessionaria": concessionaria,
             "nome": dentro.get("nome", concessionaria),
+            "posta": dentro.get("posta", ""),
             "plafond": plafond, "usato": usato,
             "resta": round(plafond - usato, 2)}
 
@@ -75,6 +77,78 @@ def puo_aprire(cartella_conti: Path, cartella_pratiche: Path,
             "Il plafond non basta per questa pratica: restano %.2f € su "
             "%.2f €. Salda la nota per liberarlo."
             % (conto["resta"], conto["plafond"]))
+
+
+# --------------------------------------------------------- il foglio in PDF
+
+GIORNI = ("lunedì", "martedì", "mercoledì", "giovedì", "venerdì", "sabato",
+          "domenica")
+
+
+def entro_quando(quando: float) -> str:
+    """Il lunedi' entro cui si salda, scritto per esteso.
+
+    Il proprietario: «la concessionaria dovra' saldare entro il lunedi'».
+    Il lunedi' e' quello che viene dopo l'emissione — anche se la nota
+    esce di lunedi', si intende il successivo: nessuno paga il giorno
+    stesso in cui riceve il conto.
+    """
+    giorno = time.localtime(quando)
+    quanti = (7 - giorno.tm_wday) or 7
+    return time.strftime("%d/%m/%Y", time.localtime(quando + quanti * 86400))
+
+
+def _soldi(quanto: float) -> str:
+    """«1234.5» diventa «1.234,50 €», come si scrive in italiano."""
+    scritto = "{:,.2f}".format(float(quanto or 0))
+    return scritto.replace(",", "@").replace(".", ",").replace("@", ".") + " €"
+
+
+def foglio(nota: Dict[str, Any], nome_concessionaria: str = "") -> bytes:
+    """La nota di saldo come documento: un foglio A4 che si stampa.
+
+    Sta qui e non nelle pagine perche' non e' una schermata: e' la carta
+    che la concessionaria mette in contabilita', e deve dire da sola tutto
+    quel che serve — chi, quando, cosa, quanto, entro quando.
+    """
+    pezzi = [
+        pdf.testo(60, 780, "Nota di saldo", 22, True),
+        pdf.testo(60, 758, "Settimana %s" % nota.get("settimana", ""), 11),
+        pdf.riga(60, 748, 535, 748),
+        pdf.testo(60, 726, nome_concessionaria or nota.get("concessionaria", ""),
+                  13, True),
+        pdf.testo(60, 710, "Emessa il %s"
+                  % time.strftime("%d/%m/%Y",
+                                  time.localtime(nota.get("quando", 0))), 10),
+        pdf.testo(60, 674, "Pratica", 10, True),
+        pdf.testo(200, 674, "Targa", 10, True),
+        pdf.testo(430, 674, "Importo", 10, True),
+        pdf.riga(60, 666, 535, 666),
+    ]
+    y = 648
+    for voce in nota.get("righe", []):
+        nome_tipo = pr.TIPI.get(voce.get("tipo", ""), {}).get(
+            "nome", voce.get("tipo", ""))
+        pezzi.append(pdf.testo(60, y, nome_tipo[:34], 10))
+        pezzi.append(pdf.testo(200, y, voce.get("targa", ""), 10))
+        pezzi.append(pdf.testo(430, y, _soldi(voce.get("prezzo", 0)), 10))
+        y -= 20
+        if y < 140:
+            # Oltre il foglio non si scrive: meglio una nota che dice «e
+            # altre N» di righe stampate una sopra l'altra.
+            restano = len(nota.get("righe", [])) - ((648 - y) // 20)
+            if restano > 0:
+                pezzi.append(pdf.testo(60, y, "e altre %d pratiche" % restano,
+                                       10))
+            break
+    pezzi.append(pdf.riga(60, y + 8, 535, y + 8))
+    pezzi.append(pdf.testo(330, y - 14, "Totale", 13, True))
+    pezzi.append(pdf.testo(430, y - 14, _soldi(nota.get("totale", 0)), 13, True))
+    pezzi.append(pdf.testo(60, 96, "Da saldare entro lunedì %s."
+                           % entro_quando(nota.get("quando", time.time())), 11))
+    pezzi.append(pdf.testo(60, 78, "Il saldo libera il plafond per le "
+                                   "pratiche della settimana nuova.", 9))
+    return pdf.fabbrica([pezzi], "Nota di saldo %s" % nota.get("settimana", ""))
 
 
 # ------------------------------------------------------- la nota di saldo
@@ -96,7 +170,7 @@ def settimana(quando: Optional[float] = None) -> str:
 
 
 def emetti(cartella_note: Path, cartella_pratiche: Path,
-           concessionaria: str) -> Dict[str, Any]:
+           concessionaria: str, nome: str = "") -> Dict[str, Any]:
     """La nota di saldo per una concessionaria: le pratiche finite e il totale.
 
     Si prendono le pratiche **finite** e non ancora saldate. Quelle ancora
@@ -122,7 +196,22 @@ def emetti(cartella_note: Path, cartella_pratiche: Path,
                            encoding="utf-8")
     os.chmod(provvisorio, 0o600)
     provvisorio.replace(percorso)
+    # Il PDF si fabbrica UNA volta, quando la nota nasce, e non si rifa'
+    # piu': rigenerarlo a ogni richiesta vorrebbe dire che una modifica al
+    # programma cambia una carta gia' mandata a un cliente.
+    carta = percorso.with_suffix(".pdf")
+    carta.write_bytes(foglio(nota, nome or concessionaria))
+    os.chmod(carta, 0o600)
     return nota
+
+
+def carta(cartella_note: Path, identificativo: str) -> bytes:
+    """Il PDF di una nota gia' emessa."""
+    percorso = _dove(cartella_note, identificativo).with_suffix(".pdf")
+    try:
+        return percorso.read_bytes()
+    except OSError:
+        raise ConteggioRifiutato("Il PDF di questa nota non c'è.")
 
 
 def leggi(cartella_note: Path, identificativo: str) -> Dict[str, Any]:
