@@ -16,9 +16,11 @@ Simula anche i guasti che contano, perche' vanno provati anche quelli:
   VEICOLI_ROTTO=429   troppe richieste
   VEICOLI_ROTTO=rete  non risponde affatto
 
-Le targhe hanno una regola sola: **ZZ999ZZ non risulta** (404), tutte le
-altre rispondono. Cosi' il banco puo' provare la targa sconosciuta senza
-dipendere da un elenco.
+Le targhe hanno due regole: **ZZ999ZZ non risulta** (404), e **AA000AA
+risponde con una marca avvelenata** — dentro c'e' uno script. Serve al
+banco per dimostrare che la pagina lo mostra come testo e non lo esegue:
+il campo «marca» e' testo di terzi come un modulo compilato da uno
+sconosciuto. Tutte le altre targhe rispondono normalmente.
 """
 import json
 import os
@@ -77,6 +79,13 @@ class H(BaseHTTPRequestHandler):
         if rotto.isdigit():
             return self._out(int(rotto),
                              {"success": False, "message": "guasto simulato"})
+        if targa == "AA000AA" and rotta == "/IT-car":
+            # Il fornitore non lo farebbe apposta, ma un dato sporco puo'
+            # arrivare da chiunque abbia scritto in un archivio pubblico.
+            return self._out(200, {"success": True, "data": dict(
+                AUTO, plate=targa,
+                make="<script>alert(1)</script>",
+                model="Fiat\" onmouseover=\"alert(2)")})
         if targa == "ZZ999ZZ":
             return self._out(404, {"success": False,
                                    "message": "plate not found"})

@@ -37,7 +37,7 @@ def guidabile_da_neopatentato(kw: Optional[float], massa_kg: Optional[float],
     if categoria.startswith("M1") and kw > TETTO_KW:
         return {"si_puo": False, "kw_per_tonnellata": round(per_tonnellata, 1),
                 "perche": "supera i 70 kW: nel primo anno di patente B non "
-                          "si puo' guidare"}
+                          "si può guidare"}
     if per_tonnellata > TETTO_KW_PER_TONNELLATA:
         return {"si_puo": False, "kw_per_tonnellata": round(per_tonnellata, 1),
                 "perche": "%.1f kW per tonnellata: sopra il limite di 55 del "
