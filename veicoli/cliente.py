@@ -53,7 +53,7 @@ import urllib.request
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from . import memoria, patente, targa as targhe
+from . import memoria, passaggio, patente, targa as targhe
 
 # Dove sta il servizio. `BASE_VEICOLI` lo dirotta sul finto, per il banco.
 CASA = "https://automotive.openapi.com"
@@ -495,6 +495,13 @@ def scheda(scritta: str, dati: Optional[Path] = None,
         categoria, _numero(fuori.get("cilindrata")), kw, massa)
     if massa:
         fuori["massa"] = massa      # detta da chi guarda, non dal fornitore
+
+    # Il passaggio di proprieta' si paga sui kW, e i kW ce li abbiamo: e'
+    # l'unico prezzo che questa scheda sa dire da sola. Entra il prezzo AL
+    # PUBBLICO e nient'altro — il costo nostro e il margine restano in
+    # `passaggio.py` e non escono da questo server.
+    if servizio == "auto":
+        fuori["passaggio"] = passaggio.prezzo(kw)
 
     if con_assicurazione:
         try:

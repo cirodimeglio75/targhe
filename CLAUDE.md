@@ -52,3 +52,10 @@ Sotto carico il fornitore risponde 302 con `/check_id/{id}`: si aspetta
 chiedendo lì, e il rimando NON si segue in automatico (i token valgono per
 percorso). `APRITORE` in `cliente.py` serve a questo — non si sostituisce
 con `urllib.request.urlopen` per fare prima.
+
+## Il costo nostro non esce dal server
+
+`passaggio.LISTINO` ha due colonne. `pubblico` si mostra; `costo` e
+`margine()` no: mai in una pagina, mai nel JSON, mai in un registro. È
+protetto dai banchi, non dalla buona volontà — prima di aggiungere una
+riga a una schermata, guarda da quale colonna la stai prendendo.

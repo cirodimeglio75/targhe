@@ -102,6 +102,22 @@ def main():
     deve(stretta["neopatentati"]["si_puo"] is False,
          "e la stessa auto piu' leggera no: 60 kW per tonnellata")
 
+    print("\nil passaggio di proprieta'")
+    from veicoli import passaggio
+    deve(s["passaggio"]["euro"] == 670.0,
+         "106 kW: il listino dice 670 € al pubblico")
+    deve("costo" not in json.dumps(s) and "margine" not in json.dumps(s),
+         "quel che costa a NOI non entra nella scheda, mai")
+    deve(passaggio.prezzo(150)["euro"] is None
+         and "non arriva" in passaggio.prezzo(150)["perche"],
+         "sopra il listino non si estrapola: si dice che va chiesto")
+    deve(passaggio.prezzo(82)["euro"] is None,
+         "dove la foto non si legge, non si inventa un numero")
+    deve(passaggio.margine(106) == 78.5,
+         "il margine si sa, e resta un fatto nostro")
+    deve(m.get("passaggio") is None,
+         "delle moto non si dice il prezzo: il listino e' delle auto")
+
     print("\nla coda del fornitore (302 + check_id)")
     os.environ["VEICOLI_LENTO"] = "1"
     lento = cliente.scheda("EE333EE", cartella=cartella,

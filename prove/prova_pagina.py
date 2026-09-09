@@ -93,6 +93,16 @@ def main():
     deve(codice == 200 and "riga G" in corpo,
          "una massa scritta a caso non rompe niente: vale come non detta")
 
+    print("\nil passaggio di proprieta'")
+    codice, corpo = chiedi("/?targa=CX118GD")
+    deve("670 €" in corpo and "Passaggio di propriet" in corpo,
+         "il prezzo del passaggio a schermo")
+    deve("591" not in corpo and "78,5" not in corpo and "78.5" not in corpo,
+         "quel che costa a noi NON finisce nella pagina")
+    codice, corpo = chiedi("/targa/CX118GD", json_grazie=True)
+    deve("591" not in corpo and "margine" not in corpo,
+         "e nemmeno nel JSON delle schermate native")
+
     print("\nle schermate native (stessa rotta, vestito diverso)")
     codice, corpo = chiedi("/targa/CX118GD", json_grazie=True)
     dentro = json.loads(corpo)

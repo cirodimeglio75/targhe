@@ -234,6 +234,22 @@ def scheda(d: Dict[str, Any]) -> str:
                                  numero(neo.get("kw_per_tonnellata"))),
                                 ("Patente necessaria", d.get("patente"))])))
 
+    pass_ = d.get("passaggio") or {}
+    if pass_.get("euro"):
+        fuori.append("<div class=carta><p class=gruppo>Passaggio di "
+                     "proprietà</p>"
+                     "<div class=riga><span class=che>Prezzo</span>"
+                     "<span class=quanto>%s €</span></div>"
+                     "<div class=riga><span class=che>%s</span></div></div>"
+                     % (_e(numero(pass_["euro"])), _e(pass_.get("perche", ""))))
+    elif pass_.get("perche"):
+        # Senza numero si dice il perche' e basta: un prezzo inventato in
+        # una schermata e' una promessa che poi qualcuno deve mantenere
+        # allo sportello.
+        fuori.append("<div class=carta><p class=gruppo>Passaggio di "
+                     "proprietà</p><div class=riga><span class=che>%s</span>"
+                     "</div></div>" % _e(pass_["perche"]))
+
     if d.get("dalla_memoria"):
         # Detto, non nascosto: chi guarda deve sapere che sta leggendo una
         # risposta di ieri, e come si chiede quella di oggi.

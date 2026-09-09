@@ -51,6 +51,7 @@ come testo (guai).
 | `veicoli/cliente.py` | chiede a Openapi (`/IT-car`, `/IT-bike`, `/IT-insurance`), traduce, spiega i guasti |
 | `veicoli/memoria.py` | ricorda le risposte: la stessa targa non si paga due volte |
 | `veicoli/patente.py` | neopatentati e patente necessaria: il conto lo facciamo noi, costa zero |
+| `veicoli/passaggio.py` | il listino del passaggio di proprietà, dai kW. **Due colonne: solo `pubblico` esce di qui** |
 | `strumenti/finto_openapi.py` | il fornitore finto del banco, che conta le domande |
 | `prove/prova_cliente.py` | il banco del cervello |
 | `prove/prova_pagina.py` | il banco della pagina |
@@ -104,3 +105,21 @@ Una pagina web per incollarlo **non c'è apposta**: finché non esiste
 un'amministrazione con un'identità dietro, sarebbe un modulo che regala le
 nostre credenziali a chiunque arrivi alla porta. Il server ascolta su
 127.0.0.1 e vuole un reverse proxy davanti, che faccia HTTPS.
+
+## Il passaggio di proprietà, e la riga da non attraversare
+
+Il passaggio si paga **in base ai kW** — la voce **P.2** del libretto — e i
+kW sono l'unico dato di potenza che il fornitore manda. Quindi la scheda
+sa dire da sola quanto costa: è l'unico prezzo che questa app possiede.
+
+`veicoli/passaggio.py` tiene **due colonne**: `pubblico`, il prezzo di
+listino, e `costo`, quanto costa a noi. **Solo la prima esce da questo
+server.** Il costo e il margine non entrano nella pagina, non entrano nel
+JSON delle schermate native, non si scrivono nei registri. I due banchi lo
+verificano cercando quei numeri nell'HTML e nel JSON: se un giorno
+trapelano, il banco diventa rosso.
+
+Dove la foto del listino non si legge (55, 82, 83-85, 86, 146-147 kW) il
+valore è `None` e la pagina dice che il prezzo va chiesto. Sopra i 147 kW
+il listino finisce e non si estrapola: un prezzo inventato in una
+schermata è una promessa che poi qualcuno deve mantenere allo sportello.
