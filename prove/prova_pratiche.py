@@ -31,7 +31,9 @@ os.environ["BASE_VEICOLI"] = "http://127.0.0.1:%d" % PORTA_FINTA
 os.environ["TOKEN_VEICOLI"] = "finto"
 
 import server                                            # noqa: E402
-from veicoli import pratiche                             # noqa: E402
+from veicoli import conti, pratiche                      # noqa: E402
+
+CHIAVE = ""      # la sessione della concessionaria, riempita da `entra()`
 
 GUASTI = []
 DOVE = Path("/tmp/prova-pratiche-%d" % os.getpid())
@@ -46,9 +48,13 @@ def deve(condizione, cosa):
         GUASTI.append(cosa)
 
 
-def chiedi(strada, dati=None, tipo=None, json_grazie=False, segui=True):
+def chiedi(strada, dati=None, tipo=None, json_grazie=False, segui=True,
+           chiave=None):
     r = urllib.request.Request("http://127.0.0.1:%d%s" % (PORTA, strada),
                                data=dati)
+    chiave = CHIAVE if chiave is None else chiave
+    if chiave:
+        r.add_header("Cookie", "chiave=" + chiave)
     if tipo:
         r.add_header("Content-Type", tipo)
     if json_grazie:
@@ -91,8 +97,18 @@ def main():
     casa.dati = DOVE
     casa.memoria = DOVE / "memoria"
     casa.pratiche = DOVE / "pratiche"
+    casa.note = DOVE / "note"
+    casa.note.mkdir(parents=True, exist_ok=True)
     threading.Thread(target=casa.serve_forever, daemon=True).start()
     time.sleep(0.3)
+
+    # Le pratiche adesso hanno un padrone: serve una concessionaria entrata,
+    # e un plafond che basti.
+    global CHIAVE
+    conti.salva_concessionaria(DOVE, "rossi", "Autosalone Rossi", 5000)
+    conto = conti.crea(DOVE, "rossi", "parolalunga1", "concessionaria",
+                       "rossi", "Autosalone Rossi")
+    CHIAVE = conti.entra(DOVE, conto)
 
     print("\ndalla scheda alla pratica")
     codice, corpo, _ = chiedi("/?targa=CX118GD")

@@ -11,7 +11,9 @@ Due rotte e basta:
     GET /targa/AB123CD       la stessa scheda
     GET /pratica/nuova?tipo=mini&targa=AB123CD   apre una pratica
     GET /pratica/<id>        i documenti che servono, e dove si caricano
-    POST /pratica/<id>       ci arriva un documento
+    POST /pratica/<id>       ci arriva un documento, o un messaggio
+    GET /entra, /esci        chi sei
+    GET /area                le tue pratiche, o quelle di tutti, o i conti
 
 La seconda esiste per gli indirizzi da condividere. **Tutte e due
 rispondono in JSON a chi manda `Accept: application/json`**: e' la regola
@@ -52,9 +54,10 @@ if not os.environ.get("TZ"):
     os.environ["TZ"] = "Europe/Rome"
 time.tzset()
 
+from pagine import area as veste_area        # noqa: E402
 from pagine import pratica as veste_pratica  # noqa: E402
 from pagine import scheda as veste           # noqa: E402
-from veicoli import cliente, pratiche        # noqa: E402
+from veicoli import cliente, conteggio, conti, pratiche   # noqa: E402
 
 
 # Quanto corpo si accetta in una volta. Il documento singolo ha il suo
@@ -77,6 +80,37 @@ class Porta(BaseHTTPRequestHandler):
 
     # ------------------------------------------------------------ risposte
 
+    # ------------------------------------------------------------- chi c'e'
+
+    def _chiave(self) -> str:
+        """La chiave di sessione dal biscotto. Niente libreria: un biscotto
+        e' `nome=valore; altro=valore`, e leggerlo a mano evita di dover
+        spiegare un modulo intero a chi legge questa riga."""
+        for pezzo in (self.headers.get("Cookie") or "").split(";"):
+            nome, _, valore = pezzo.strip().partition("=")
+            if nome == "chiave":
+                return valore.strip()
+        return ""
+
+    def _conto(self):
+        return conti.chi(self.server.dati, self._chiave())
+
+    def _da_fuori(self) -> bool:
+        """Se questa POST arriva da un'altra casa.
+
+        Il biscotto e' `SameSite=Lax`, che gia' non parte per le richieste
+        di terzi; questo e' il secondo giro di chiave: un `Origin` che non
+        e' il nostro non entra. Le due cose insieme sono la difesa contro
+        il modulo nascosto in un'altra pagina che fa fare a chi e' entrato
+        quello che non voleva fare.
+        """
+        origine = self.headers.get("Origin")
+        if not origine:
+            return False
+        casa = self.headers.get("Host", "")
+        return not (origine.endswith("//" + casa)
+                    or origine.endswith("://" + casa))
+
     def _vuole_json(self) -> bool:
         """Se chi chiama vuole i dati e non la pagina: e' l'app nativa."""
         return "application/json" in (self.headers.get("Accept") or "")
@@ -96,6 +130,24 @@ class Porta(BaseHTTPRequestHandler):
                          "form-action 'self'")
         self.end_headers()
         self.wfile.write(corpo)
+
+    def _biscotto(self, chiave: str, spegni: bool = False) -> str:
+        pezzi = ["chiave=%s" % (chiave if not spegni else ""),
+                 "Path=/", "HttpOnly", "SameSite=Lax",
+                 "Max-Age=%d" % (0 if spegni else conti.DURATA)]
+        # `Secure` solo se davanti c'e' HTTPS: metterlo sempre spegnerebbe
+        # l'accesso sul banco, che gira in chiaro su 127.0.0.1.
+        if (self.headers.get("X-Forwarded-Proto") or "").lower() == "https":
+            pezzi.append("Secure")
+        return "; ".join(pezzi)
+
+    def _rimanda(self, dove: str, biscotto: str = "") -> None:
+        self.send_response(303)
+        self.send_header("Location", dove)
+        if biscotto:
+            self.send_header("Set-Cookie", biscotto)
+        self.send_header("Content-Length", "0")
+        self.end_headers()
 
     def _pagina(self, testo: str, codice: int = 200) -> None:
         self._manda(codice, "text/html; charset=utf-8", testo.encode("utf-8"))
@@ -118,13 +170,49 @@ class Porta(BaseHTTPRequestHandler):
                                "configurato": cliente.configurato(self.server.dati),
                                "token_da": cliente.da_dove(self.server.dati)})
 
+        if strada == "/entra":
+            return self._pagina(veste_area.entra())
+        if strada == "/esci":
+            conti.esci(self.server.dati, self._chiave())
+            return self._rimanda("/entra", self._biscotto("", spegni=True))
+        if strada == "/area":
+            return self._area()
+
         if strada == "/pratica/nuova":
             tipo = (campi.get("tipo") or [""])[0]
             targa = (campi.get("targa") or [""])[0].upper()
+            conto = self._conto()
+            if not conto or conto.get("ruolo") != "concessionaria":
+                # Le pratiche le apre una concessionaria, perche' una
+                # pratica consuma un plafond, e il plafond ha un nome.
+                if self._vuole_json():
+                    return self._json({"errore": "Entra come "
+                                       "concessionaria."}, 401)
+                return self._pagina(veste_area.entra(
+                    "Per aprire una pratica entra come concessionaria."), 401)
             try:
+                # Il prezzo si prende dalla scheda gia' cercata: e' in
+                # memoria, quindi non costa una seconda chiamata. Se la
+                # targa non e' mai stata cercata, la pratica parte senza
+                # prezzo e il conteggio lo mettera' l'agenzia.
+                prezzo, kw = 0.0, None
+                try:
+                    dati_veicolo = cliente.scheda(
+                        targa, dati=self.server.dati,
+                        cartella=self.server.memoria,
+                        con_assicurazione=False)
+                    kw = dati_veicolo.get("kw")
+                    prezzo = (dati_veicolo.get("passaggio") or {}).get("euro") or 0.0
+                except cliente.VeicoloRifiutato:
+                    pass
+                conteggio.puo_aprire(self.server.dati, self.server.pratiche,
+                                     conto["concessionaria"], prezzo)
                 identificativo = pratiche.apri(self.server.pratiche, tipo,
-                                               targa)
-            except pratiche.PraticaRifiutata as e:
+                                               targa,
+                                               conto["concessionaria"],
+                                               prezzo, kw)
+            except (pratiche.PraticaRifiutata,
+                    conteggio.ConteggioRifiutato) as e:
                 if self._vuole_json():
                     return self._json({"errore": e.utente}, 400)
                 return self._pagina(veste.ricerca(e.utente, targa), 400)
@@ -139,8 +227,20 @@ class Porta(BaseHTTPRequestHandler):
             return
 
         if strada.startswith("/pratica/"):
+            resto = strada[len("/pratica/"):].strip("/")
+            if "/" in resto:
+                # /pratica/<id>/documento/<chiave>: il file vero.
+                pezzi = resto.split("/")
+                try:
+                    if len(pezzi) != 3 or pezzi[1] != "documento":
+                        raise pratiche.PraticaRifiutata("Non esiste.")
+                    return self._documento(pezzi[0], pezzi[2])
+                except pratiche.PraticaRifiutata as e:
+                    if self._vuole_json():
+                        return self._json({"errore": e.utente}, 404)
+                    return self._pagina(veste.ricerca(e.utente), 404)
             try:
-                return self._pratica(strada[len("/pratica/"):].strip("/"))
+                return self._pratica(resto)
             except pratiche.PraticaRifiutata as e:
                 if self._vuole_json():
                     return self._json({"errore": e.utente}, 404)
@@ -232,24 +332,68 @@ class Porta(BaseHTTPRequestHandler):
     def _pratica(self, identificativo: str, messaggio: str = "",
                  codice: int = 200) -> None:
         p = pratiche.leggi(self.server.pratiche, identificativo)
+        conto = self._conto()
+        if not pratiche.puo_vedere(p, conto):
+            # Stessa risposta di una pratica che non esiste: dire «esiste ma
+            # non e' tua» racconta a uno sconosciuto che quella pratica c'e'.
+            raise pratiche.PraticaRifiutata("Questa pratica non esiste.")
         if self._vuole_json():
             return self._json(p, codice)
         return self._pagina(
-            veste_pratica.pratica(p, pratiche.TIPI[p["tipo"]], messaggio),
+            veste_pratica.pratica(p, pratiche.TIPI[p["tipo"]], messaggio,
+                                  conto, pratiche.DOCUMENTI_AGENZIA),
             codice)
 
     def do_POST(self):
         strada = urllib.parse.urlsplit(self.path).path
+        if self._da_fuori():
+            return self._manda(403, "text/plain; charset=utf-8",
+                               "modulo mandato da un'altra pagina"
+                               .encode("utf-8"))
+        try:
+            if strada == "/entra":
+                return self._fai_entrare()
+            if strada.startswith("/area/"):
+                return self._azione_area(strada)
+        except (conti.ContoRifiutato, conteggio.ConteggioRifiutato) as e:
+            return self._area(e.utente)
+
         if not strada.startswith("/pratica/"):
             return self._manda(404, "text/plain; charset=utf-8", b"non esiste")
         identificativo = strada[len("/pratica/"):].strip("/")
         try:
+            conto = self._conto()
+            if not conto:
+                raise pratiche.PraticaRifiutata("Entra per lavorare su una "
+                                                "pratica.")
+            p = pratiche.leggi(self.server.pratiche, identificativo)
+            if not pratiche.puo_vedere(p, conto):
+                raise pratiche.PraticaRifiutata("Questa pratica non esiste.")
             pezzi = self._pezzi_del_modulo(self._corpo())
+            if "messaggio" in pezzi:
+                pratiche.messaggio(self.server.pratiche, identificativo,
+                                   conto, str(pezzi["messaggio"]))
+                return self._pratica(identificativo)
+            if "chiudi" in pezzi:
+                if conto.get("ruolo") != "agenzia":
+                    raise pratiche.PraticaRifiutata(
+                        "Solo l'agenzia può chiudere una pratica.")
+                pratiche.chiudi(self.server.pratiche, identificativo)
+                return self._pratica(identificativo, "Pratica chiusa.")
+            quale_documento = str(pezzi.get("documento") or "")
+            se_agenzia = quale_documento in {c for c, _
+                                             in pratiche.DOCUMENTI_AGENZIA}
+            if se_agenzia and conto.get("ruolo") != "agenzia":
+                raise pratiche.PraticaRifiutata(
+                    "Questi documenti li carica l'agenzia.")
+            if not se_agenzia and conto.get("ruolo") == "agenzia":
+                raise pratiche.PraticaRifiutata(
+                    "I documenti della concessionaria li carica lei.")
             if "motivo" in pezzi:
                 pratiche.scrivi_motivo(self.server.pratiche, identificativo,
                                        str(pezzi["motivo"]))
                 return self._pratica(identificativo, "Motivo salvato.")
-            quale = str(pezzi.get("documento") or "")
+            quale = quale_documento
             dato = pezzi.get("file") or b""
             if not isinstance(dato, bytes):
                 dato = b""
@@ -264,6 +408,121 @@ class Porta(BaseHTTPRequestHandler):
                 return self._pagina(veste.ricerca(e.utente), 404)
         return self._pratica(identificativo, "Documento arrivato.")
 
+    def _documento(self, identificativo: str, chiave: str) -> None:
+        """Un documento caricato, rimandato a chi ha il diritto di vederlo.
+
+        L'agenzia deve poter LEGGERE la visura, senno' non puo' lavorarla:
+        e' il motivo per cui questa rotta esiste. Le difese, tutte insieme:
+        si passa da `puo_vedere`, quindi una concessionaria non arriva ai
+        documenti di un'altra; il tipo e' quello che abbiamo stabilito noi
+        guardando i byte; `nosniff` impedisce al browser di indovinarne un
+        altro; e la regola dei contenuti spegne qualunque cosa il file
+        provasse a eseguire.
+        """
+        pratica = pratiche.leggi(self.server.pratiche, identificativo)
+        if not pratiche.puo_vedere(pratica, self._conto()):
+            raise pratiche.PraticaRifiutata("Questo documento non c'è.")
+        dato, roba, nome = pratiche.documento(self.server.pratiche,
+                                              identificativo, chiave)
+        tipi = {"jpg": "image/jpeg", "png": "image/png", "pdf": "application/pdf",
+                "heic": "image/heic"}
+        self.send_response(200)
+        self.send_header("Content-Type", tipi.get(roba,
+                                                  "application/octet-stream"))
+        self.send_header("Content-Length", str(len(dato)))
+        self.send_header("Content-Disposition",
+                         "inline; filename=\"%s.%s\"" % (chiave, roba))
+        self.send_header("Cache-Control", "no-store, private")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Content-Security-Policy",
+                         "default-src 'none'; sandbox")
+        self.send_header("X-Frame-Options", "DENY")
+        self.end_headers()
+        self.wfile.write(dato)
+
+    # ----------------------------------------------------------- le aree
+
+    def _fai_entrare(self) -> None:
+        pezzi = self._pezzi_del_modulo(self._corpo())
+        conto = conti.prova(self.server.dati, str(pezzi.get("utente") or ""),
+                            str(pezzi.get("parola") or ""))
+        if not conto:
+            # Una frase sola per tutti i casi: dire quale dei due era
+            # sbagliato regala meta' della risposta a chi tenta.
+            return self._pagina(veste_area.entra(
+                "Nome utente o parola d'ordine non giusti."), 401)
+        chiave = conti.entra(self.server.dati, conto)
+        return self._rimanda("/area", self._biscotto(chiave))
+
+    def _area(self, messaggio: str = "") -> None:
+        conto = self._conto()
+        if not conto:
+            return self._pagina(veste_area.entra(messaggio), 401)
+        ruolo = conto.get("ruolo")
+        if ruolo == "agenzia":
+            return self._pagina(veste_area.agenzia(
+                pratiche.per_concessionaria(self.server.pratiche),
+                conti.concessionarie(self.server.dati)))
+        if ruolo == "amministrazione":
+            plafond = [conteggio.quanto_resta(self.server.dati,
+                                              self.server.pratiche, c)
+                       for c in sorted(conti.concessionarie(self.server.dati))]
+            pronte = {}
+            for c in conti.concessionarie(self.server.dati):
+                finite = pratiche.elenco(self.server.pratiche, c, "finita")
+                if finite:
+                    pronte[c] = round(sum(float(p.get("prezzo") or 0)
+                                          for p in finite), 2)
+            return self._pagina(veste_area.amministrazione(
+                plafond, conteggio.note(self.server.note), pronte, messaggio))
+        suo = conto.get("concessionaria", "")
+        return self._pagina(veste_area.concessionaria(
+            pratiche.elenco(self.server.pratiche, suo),
+            conteggio.quanto_resta(self.server.dati, self.server.pratiche, suo),
+            conteggio.note(self.server.note, suo)))
+
+    def _azione_area(self, strada: str) -> None:
+        conto = self._conto()
+        if not conto or conto.get("ruolo") != "amministrazione":
+            # Il plafond e le note li muove solo l'amministrazione. Non e'
+            # una questione di schermate nascoste: la rotta stessa dice di no.
+            return self._pagina(veste_area.entra(
+                "Serve l'amministrazione per questo."), 403)
+        pezzi = self._pezzi_del_modulo(self._corpo())
+        if strada == "/area/plafond":
+            quale = str(pezzi.get("concessionaria") or "")
+            gia = conti.concessionaria(self.server.dati, quale)
+            try:
+                quanto = float(str(pezzi.get("plafond") or "0")
+                               .replace(".", "").replace(",", "."))
+            except ValueError:
+                return self._area("Il plafond dev'essere un numero.")
+            conti.salva_concessionaria(self.server.dati, quale,
+                                       gia.get("nome", quale), quanto)
+            return self._area("Plafond aggiornato.")
+        if strada == "/area/nota":
+            nota = conteggio.emetti(self.server.note, self.server.pratiche,
+                                    str(pezzi.get("concessionaria") or ""))
+            return self._area("Nota emessa: %.2f €." % nota["totale"])
+        if strada == "/area/saldo":
+            conteggio.segna_saldata(self.server.note, self.server.pratiche,
+                                    str(pezzi.get("nota") or ""))
+            return self._area("Saldo registrato: il plafond è tornato libero.")
+        if strada == "/area/conto":
+            quale = str(pezzi.get("concessionaria") or "").strip().lower()
+            if quale:
+                conti.salva_concessionaria(
+                    self.server.dati, quale,
+                    str(pezzi.get("nome") or quale),
+                    conti.concessionaria(self.server.dati,
+                                         quale).get("plafond", 0))
+            conti.crea(self.server.dati, str(pezzi.get("utente") or ""),
+                       str(pezzi.get("parola") or ""),
+                       str(pezzi.get("ruolo") or "concessionaria"),
+                       quale, str(pezzi.get("nome") or ""))
+            return self._area("Conto creato.")
+        return self._area()
+
     def do_HEAD(self):
         self.do_GET()
 
@@ -277,6 +536,8 @@ def main() -> int:
                          help="dove si ricordano le risposte")
     ragioni.add_argument("--pratiche", default="dati/pratiche",
                          help="dove stanno le pratiche e i documenti")
+    ragioni.add_argument("--note", default="dati/note",
+                         help="dove stanno le note di saldo")
     ragioni.add_argument("--finto", action="store_true",
                          help="parla col fornitore finto: non spende niente")
     detto = ragioni.parse_args()
@@ -310,6 +571,19 @@ def main() -> int:
     server.dati = dati
     server.memoria = memoria
     server.pratiche = pratiche_dove
+    note_dove = Path(detto.note)
+    note_dove.mkdir(parents=True, exist_ok=True)
+    os.chmod(note_dove, 0o700)
+    server.note = note_dove
+    if not conti.conti(dati):
+        # Il primo conto non si puo' creare da dentro: senza
+        # amministrazione non c'e' nessuno che possa farne una.
+        print("Nessun conto. Il primo si fa cosi':\n"
+              "  python3 -c \"from pathlib import Path; "
+              "from veicoli import conti; "
+              "conti.crea(Path('%s'), 'admin', 'parolalunga', "
+              "'amministrazione', nome='Amministrazione')\""
+              % dati, flush=True)
     if not cliente.configurato(dati):
         print("ATTENZIONE: nessun token. Ogni ricerca fallirà con una "
               "frase che lo spiega. Si mette in TOKEN_VEICOLI, oppure si "

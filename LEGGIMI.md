@@ -32,9 +32,10 @@ per intero e non si spende un centesimo. Prova `CX118GD` (auto grossa),
 
 I due banchi, che girano da soli:
 
-    python3 prove/prova_cliente.py   # il cervello: 31 controlli
+    python3 prove/prova_cliente.py   # il cervello: 35 controlli
     python3 prove/prova_pagina.py    # la pagina: 26 controlli
-    python3 prove/prova_pratiche.py  # i documenti: 20 controlli
+    python3 prove/prova_pratiche.py  # i documenti: 19 controlli
+    python3 prove/prova_area.py      # il giro intero: 33 controlli
 
 Controllano le cose che sbagliate si pagano: la memoria che non ricorda
 (soldi), il «non risulta» che sembra un guasto (recensioni), il token
@@ -53,7 +54,10 @@ come testo (guai).
 | `veicoli/memoria.py` | ricorda le risposte: la stessa targa non si paga due volte |
 | `veicoli/patente.py` | neopatentati e patente necessaria: il conto lo facciamo noi, costa zero |
 | `veicoli/passaggio.py` | il listino del passaggio di proprietà, dai kW. **Due colonne: solo `pubblico` esce di qui** |
-| `veicoli/pratiche.py` | quali documenti servono per ogni pratica, e dove finiscono quelli caricati |
+| `veicoli/pratiche.py` | quali documenti servono per ogni pratica, dove finiscono, e chi può vederli |
+| `veicoli/conti.py` | chi entra: concessionaria, agenzia, amministrazione |
+| `veicoli/conteggio.py` | plafond, conteggio del sabato, nota di saldo |
+| `pagine/area.py` | le tre aree, una per mestiere |
 | `pagine/pratica.py` | l'elenco dei documenti con le spunte, e i tasti per fotografare |
 | `strumenti/finto_openapi.py` | il fornitore finto del banco, che conta le domande |
 | `prove/prova_cliente.py` | il banco del cervello |
@@ -161,3 +165,59 @@ Tutte queste sono applicate e provate dal banco:
 **Quel che manca, e non è codice**: informativa, tempo di conservazione,
 cancellazione a pratica chiusa, e il modo in cui l'agenzia ritira i
 documenti. Vanno scritti prima che questa roba veda un utente vero.
+
+## Il giro: concessionaria → agenzia → amministrazione
+
+Tre mestieri, tre aree, una strada sola:
+
+1. **la concessionaria** cerca una targa, apre la pratica (il prezzo si
+   prende dai kW) e fotografa i documenti. Se il **plafond** non basta, la
+   pratica non parte — e si ferma **prima** che qualcuno fotografi
+   qualcosa;
+2. **l'agenzia** vede tutte le pratiche **raggruppate per concessionaria**,
+   apre i documenti caricati, e se qualcosa non va **scrive un messaggio
+   dentro la pratica**. Finito il lavoro carica il **documento della
+   pratica** e la **ricevuta**, e la chiude;
+3. **l'amministrazione** assegna i plafond, e **il sabato** emette la
+   **nota di saldo** per ogni concessionaria: le pratiche finite e non
+   ancora pagate, con il totale. Quando la concessionaria salda (entro il
+   lunedì), la nota si segna pagata e **il plafond torna libero**.
+
+### Le porte, e chi non passa
+
+- **una concessionaria vede solo le sue pratiche.** A chi chiede quelle di
+  un'altra si risponde «non esiste», non «non è tua»: la seconda frase
+  racconta a uno sconosciuto che quella pratica c'è;
+- **i documenti della concessionaria li carica la concessionaria**, quelli
+  di fine lavoro l'agenzia. Ognuno i suoi;
+- **una pratica non si chiude a mano**: si chiude quando il documento e la
+  ricevuta ci sono davvero. Uno stato dichiarabile a vuoto è uno stato di
+  cui non ci si può fidare al conteggio del sabato;
+- **i plafond e le note li muove solo l'amministrazione**, e lo dice la
+  rotta, non una schermata nascosta;
+- **la parola d'ordine sta impastata con `scrypt`**, ognuna col suo sale, e
+  il confronto è a tempo costante;
+- **la chiave di sessione vive in un biscotto `HttpOnly`, `SameSite=Lax`**,
+  e in più ogni modulo che arriva da un'altra casa viene rifiutato;
+- **i documenti si aprono solo da dentro la pratica**, con il tipo che
+  abbiamo stabilito noi guardando i byte, `nosniff` e una regola che
+  spegne qualunque cosa il file provasse a eseguire.
+
+### Il primo conto
+
+Non c'è registrazione da fuori: i conti li fa l'amministrazione. Il
+primissimo si crea da riga di comando — il server lo scrive all'avvio
+quando non ne trova nessuno:
+
+    python3 -c "from pathlib import Path; from veicoli import conti; \
+      conti.crea(Path('dati'), 'admin', 'parolalunga', 'amministrazione', \
+                 nome='Amministrazione')"
+
+### Cosa manca ancora, di questo giro
+
+- **la nota di saldo è una schermata, non un documento**: se deve arrivare
+  per posta o come PDF, va detto;
+- **nessuno sollecita il lunedì**: il plafond resta occupato finché non si
+  salda, e quello frena da solo, ma un promemoria non c'è;
+- **i documenti restano sul nostro disco**: non c'è un modo per l'agenzia
+  di scaricarli in blocco né una cancellazione automatica a pratica chiusa.

@@ -81,6 +81,26 @@ form.carica input[name=motivo] { flex:1; min-width:0; border:1px solid
   background:var(--fondo); color:var(--inchiostro) }
 form.carica button { padding:10px 16px; font-size:15px }
 .nota-riga { color:var(--tenue); font-size:13px; margin:2px 0 10px }
+form.dritto { flex-direction:column; align-items:stretch }
+form.dritto input, form.dritto button { width:100% }
+a.voce { display:grid; grid-template-columns:1fr auto; gap:2px 12px;
+  padding:10px 0; border-bottom:1px solid var(--riga);
+  text-decoration:none; color:var(--inchiostro) }
+a.voce:last-child { border-bottom:0 }
+/* Posate a mano: lasciate all'automatico, testa e prezzo si scambiavano
+   di colonna e il prezzo andava a capo. */
+.voce-testa { grid-column:1; grid-row:1; font-weight:700 }
+.voce-sotto { grid-column:1; grid-row:2; color:var(--tenue); font-size:13px }
+.voce-prezzo { grid-column:2; grid-row:1/3; align-self:center;
+  white-space:nowrap; font-weight:600; color:var(--tenue) }
+.messaggio { padding:10px 0; border-bottom:1px solid var(--riga) }
+.messaggio:last-of-type { border-bottom:0 }
+.messaggio .chi { font-weight:700; font-size:13px }
+.messaggio .quando { color:var(--tenue); font-size:12px; margin-left:6px }
+.messaggio p { margin:2px 0 0; overflow-wrap:anywhere }
+.bollo { display:inline-block; font-size:12px; font-weight:700;
+  padding:2px 8px; border-radius:999px; background:var(--fondo);
+  border:1px solid var(--riga); color:var(--tenue) }
 a { color:var(--blu) }
 """
 

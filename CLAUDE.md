@@ -69,3 +69,17 @@ riscaricano da nessuna rotta, e nei registri non finiscono né nomi né
 targhe. Il banco `prove/prova_pratiche.py` prova ognuna di queste: se una
 diventa rossa, non è un controllo da aggiustare, è una porta che si è
 aperta.
+
+## Tre mestieri, e le porte fra loro
+
+Concessionaria, agenzia, amministrazione. Prima di toccare una rotta,
+chiediti chi la può chiamare — e ricordati che a chi non ha diritto si
+risponde «non esiste», mai «non è tuo». `prove/prova_area.py` prova ogni
+porta: una concessionaria che vede le pratiche di un'altra non è un
+controllo da aggiustare, è un cliente che legge i dati di un altro cliente.
+
+## Lo stato di una pratica non si dichiara
+
+«consegnata» vuol dire che i documenti ci sono, e si ricalcola guardando.
+«finita» richiede il documento e la ricevuta. Non aggiungere un tasto che
+imposti uno stato a mano: il conteggio del sabato si fida di quegli stati.

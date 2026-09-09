@@ -15,14 +15,62 @@ from typing import Any, Dict
 
 from .scheda import STILE, _e, numero, telaio
 
+PAROLE_STATO = {"aperta": "in preparazione", "consegnata": "da lavorare",
+                "finita": "finita", "saldata": "saldata"}
+
+
+def _data(quando: Any) -> str:
+    import time
+    try:
+        return time.strftime("%d/%m/%Y %H:%M", time.localtime(float(quando)))
+    except (TypeError, ValueError):
+        return ""
+
+
+def _messaggi(p: Dict[str, Any]) -> str:
+    """La conversazione dentro la pratica: e' li' che l'agenzia dice cosa
+    non va, e li' che si ritrova il perche' fra sei mesi."""
+    voci = []
+    for m in p.get("messaggi") or []:
+        voci.append("<div class=messaggio><span class=chi>%s</span>"
+                    "<span class=quando>%s · %s</span><p>%s</p></div>"
+                    % (_e(m.get("chi", "")), _e(m.get("ruolo", "")),
+                       _e(_data(m.get("quando"))), _e(m.get("testo", ""))))
+    return ("<div class=carta><p class=gruppo>Messaggi</p>%s"
+            "<form action='/pratica/%s' method=post class=carica>"
+            "<input name=messaggio placeholder='Scrivi qui' maxlength=2000 "
+            "required><button>Manda</button></form></div>"
+            % ("".join(voci) or "<p class=sotto>Nessun messaggio.</p>",
+               _e(p["id"])))
+
+
+def _lavoro_agenzia(p: Dict[str, Any], documenti_agenzia) -> str:
+    """Quel che vede solo l'agenzia: le due carte di fine lavoro."""
+    righe = []
+    for chiave, titolo in documenti_agenzia:
+        righe.append(_riga_documento(p["id"], chiave, titolo,
+                                     (p.get("documenti") or {}).get(chiave)))
+    tasto = ""
+    if p.get("stato") == "consegnata" and all(
+            c in (p.get("documenti") or {}) for c, _ in documenti_agenzia):
+        tasto = ("<form action='/pratica/%s' method=post class=carica>"
+                 "<input type=hidden name=chiudi value=1>"
+                 "<button>Chiudi la pratica</button></form>" % _e(p["id"]))
+    return ("<div class=carta><p class=gruppo>Lavoro finito</p>%s%s</div>"
+            % ("".join(righe), tasto))
+
 
 def _riga_documento(identificativo: str, chiave: str, titolo: str,
                     caricato: Dict[str, Any]) -> str:
     if caricato:
         nome = caricato.get("nome_dato") or caricato.get("file", "")
+        # Il nome del file lo scrive chi carica: esce da `html.escape` come
+        # tutto il resto, e nel collegamento c'e' la CHIAVE, non il nome.
         return ("<div class=riga><span class=che>%s</span>"
-                "<span class=quanto><span class=si>✓</span></span></div>"
-                "<p class=nota-riga>%s</p>" % (_e(titolo), _e(nome)))
+                "<span class=quanto><a href='/pratica/%s/documento/%s'>"
+                "guarda</a></span></div>"
+                "<p class=nota-riga><span class=si>✓</span> %s</p>"
+                % (_e(titolo), _e(identificativo), _e(chiave), _e(nome)))
     return ("<div class=riga><span class=che>%s</span></div>"
             "<form action='/pratica/%s' method=post "
             "enctype='multipart/form-data' class=carica>"
@@ -33,10 +81,23 @@ def _riga_documento(identificativo: str, chiave: str, titolo: str,
 
 
 def pratica(p: Dict[str, Any], tipo: Dict[str, Any],
-            messaggio: str = "") -> str:
+            messaggio: str = "", conto: Dict[str, Any] = None,
+            documenti_agenzia=()) -> str:
+    conto = conto or {}
+    ruolo = conto.get("ruolo", "")
     dentro = ["<h1>%s</h1>" % _e(tipo.get("nome", "Pratica"))]
+    sotto = []
     if p.get("targa"):
-        dentro.append("<p class=sottotitolo>Targa %s</p>" % _e(p["targa"]))
+        sotto.append("Targa %s" % p["targa"])
+    if p.get("prezzo"):
+        sotto.append("%s €" % numero(p["prezzo"]))
+    if ruolo in ("agenzia", "amministrazione") and p.get("concessionaria"):
+        sotto.append(p["concessionaria"])
+    if sotto:
+        dentro.append("<p class=sottotitolo>%s <span class=bollo>%s</span></p>"
+                      % (_e(" · ".join(sotto)),
+                         _e(PAROLE_STATO.get(p.get("stato", ""),
+                                             p.get("stato", "")))))
     if messaggio:
         dentro.append("<div class=avviso>%s</div>" % _e(messaggio))
 
@@ -68,7 +129,15 @@ def pratica(p: Dict[str, Any], tipo: Dict[str, Any],
             "maxlength=500><button>Salva</button></form></div>"
             % (_e(tipo["motivo"]), _e(p["id"]), _e(p.get("motivo", ""))))
 
-    dentro.append("<p class=nota>Questo indirizzo è la chiave della "
-                  "pratica: tienilo, e non darlo a chi non deve vederla. "
-                  "I documenti caricati non si riscaricano da qui.</p>")
+    if ruolo == "agenzia":
+        dentro.append(_lavoro_agenzia(p, documenti_agenzia))
+    elif p.get("stato") in ("finita", "saldata"):
+        dentro.append("<div class=carta><p class=titolone>"
+                      "<span class=si>Pratica finita</span></p>"
+                      "<p class=sotto>L'agenzia ha caricato il documento e "
+                      "la ricevuta.</p></div>")
+
+    dentro.append(_messaggi(p))
+    dentro.append("<p class=nota>I documenti si aprono solo da qui, e solo "
+                  "a chi ha titolo. <a href='/area'>Torna all'elenco</a></p>")
     return telaio("%s — Targhe" % tipo.get("nome", "Pratica"), "".join(dentro))
