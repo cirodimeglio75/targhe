@@ -9,6 +9,9 @@ Due rotte e basta:
     GET /?targa=AB123CD      la pagina, o la scheda
     GET /?targa=AB123CD&massa=1400   la stessa, col conto dei neopatentati
     GET /targa/AB123CD       la stessa scheda
+    GET /pratica/nuova?tipo=mini&targa=AB123CD   apre una pratica
+    GET /pratica/<id>        i documenti che servono, e dove si caricano
+    POST /pratica/<id>       ci arriva un documento
 
 La seconda esiste per gli indirizzi da condividere. **Tutte e due
 rispondono in JSON a chi manda `Accept: application/json`**: e' la regola
@@ -32,9 +35,11 @@ import os
 import sys
 import time
 import urllib.parse
+from email.parser import BytesParser
+from email.policy import default as politica
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Dict, Optional
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -47,8 +52,15 @@ if not os.environ.get("TZ"):
     os.environ["TZ"] = "Europe/Rome"
 time.tzset()
 
-from pagine import scheda as veste          # noqa: E402
-from veicoli import cliente                 # noqa: E402
+from pagine import pratica as veste_pratica  # noqa: E402
+from pagine import scheda as veste           # noqa: E402
+from veicoli import cliente, pratiche        # noqa: E402
+
+
+# Quanto corpo si accetta in una volta. Il documento singolo ha il suo
+# tetto in `pratiche.PESO_MASSIMO`; questo e' il tetto della busta, e serve
+# a non tenere in memoria quel che qualcuno manda per gioco.
+BUSTA_MASSIMA = 12 * 1024 * 1024
 
 
 class Porta(BaseHTTPRequestHandler):
@@ -106,6 +118,34 @@ class Porta(BaseHTTPRequestHandler):
                                "configurato": cliente.configurato(self.server.dati),
                                "token_da": cliente.da_dove(self.server.dati)})
 
+        if strada == "/pratica/nuova":
+            tipo = (campi.get("tipo") or [""])[0]
+            targa = (campi.get("targa") or [""])[0].upper()
+            try:
+                identificativo = pratiche.apri(self.server.pratiche, tipo,
+                                               targa)
+            except pratiche.PraticaRifiutata as e:
+                if self._vuole_json():
+                    return self._json({"errore": e.utente}, 400)
+                return self._pagina(veste.ricerca(e.utente, targa), 400)
+            if self._vuole_json():
+                return self._json({"id": identificativo}, 201)
+            # Si rimanda alla pratica: cosi' l'indirizzo nella barra e' gia'
+            # quello da tenere, e un ricarica non apre una pratica nuova.
+            self.send_response(303)
+            self.send_header("Location", "/pratica/" + identificativo)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
+
+        if strada.startswith("/pratica/"):
+            try:
+                return self._pratica(strada[len("/pratica/"):].strip("/"))
+            except pratiche.PraticaRifiutata as e:
+                if self._vuole_json():
+                    return self._json({"errore": e.utente}, 404)
+                return self._pagina(veste.ricerca(e.utente), 404)
+
         targa = ""
         if strada.startswith("/targa/"):
             targa = urllib.parse.unquote(strada[len("/targa/"):])
@@ -146,6 +186,84 @@ class Porta(BaseHTTPRequestHandler):
             return self._json(dati)
         return self._pagina(veste.scheda(dati))
 
+    # ---------------------------------------------------------- le pratiche
+
+    def _corpo(self) -> bytes:
+        """Il corpo della richiesta, con un tetto. Oltre il tetto si taglia:
+        leggere quel che il mittente dichiara senza un limite e' il modo
+        classico di far finire la memoria a un server."""
+        quanto = int(self.headers.get("Content-Length") or 0)
+        if quanto <= 0:
+            return b""
+        if quanto > BUSTA_MASSIMA:
+            raise pratiche.PraticaRifiutata(
+                "Il file è troppo grande: al massimo %d MB."
+                % (pratiche.PESO_MASSIMO // (1024 * 1024)))
+        return self.rfile.read(quanto)
+
+    def _pezzi_del_modulo(self, corpo: bytes) -> Dict[str, Any]:
+        """Il modulo caricato dal telefono, smontato nei suoi pezzi.
+
+        Il multipart lo legge la libreria della posta elettronica, che e'
+        la stessa grammatica e la sa da trent'anni: scrivere a mano un
+        lettore di confini e' il posto dove ci si taglia."""
+        tipo = self.headers.get("Content-Type", "")
+        if not tipo.startswith("multipart/form-data"):
+            # Un modulo semplice: campo=valore, senza file.
+            campi = urllib.parse.parse_qs(corpo.decode("utf-8", "replace"))
+            return {k: v[0] for k, v in campi.items()}
+        testa = ("Content-Type: %s\r\nMIME-Version: 1.0\r\n\r\n"
+                 % tipo).encode("utf-8")
+        messaggio = BytesParser(policy=politica).parsebytes(testa + corpo)
+        fuori: Dict[str, Any] = {}
+        for pezzo in messaggio.iter_parts():
+            nome = pezzo.get_param("name", header="content-disposition")
+            if not nome:
+                continue
+            dato = pezzo.get_payload(decode=True) or b""
+            file_dato = pezzo.get_filename()
+            if file_dato is not None:
+                fuori[nome] = dato
+                fuori[nome + "__nome"] = file_dato
+            else:
+                fuori[nome] = dato.decode("utf-8", "replace")
+        return fuori
+
+    def _pratica(self, identificativo: str, messaggio: str = "",
+                 codice: int = 200) -> None:
+        p = pratiche.leggi(self.server.pratiche, identificativo)
+        if self._vuole_json():
+            return self._json(p, codice)
+        return self._pagina(
+            veste_pratica.pratica(p, pratiche.TIPI[p["tipo"]], messaggio),
+            codice)
+
+    def do_POST(self):
+        strada = urllib.parse.urlsplit(self.path).path
+        if not strada.startswith("/pratica/"):
+            return self._manda(404, "text/plain; charset=utf-8", b"non esiste")
+        identificativo = strada[len("/pratica/"):].strip("/")
+        try:
+            pezzi = self._pezzi_del_modulo(self._corpo())
+            if "motivo" in pezzi:
+                pratiche.scrivi_motivo(self.server.pratiche, identificativo,
+                                       str(pezzi["motivo"]))
+                return self._pratica(identificativo, "Motivo salvato.")
+            quale = str(pezzi.get("documento") or "")
+            dato = pezzi.get("file") or b""
+            if not isinstance(dato, bytes):
+                dato = b""
+            pratiche.aggiungi(self.server.pratiche, identificativo, quale,
+                              dato, str(pezzi.get("file__nome") or ""))
+        except pratiche.PraticaRifiutata as e:
+            if self._vuole_json():
+                return self._json({"errore": e.utente}, 400)
+            try:
+                return self._pratica(identificativo, e.utente, 400)
+            except pratiche.PraticaRifiutata:
+                return self._pagina(veste.ricerca(e.utente), 404)
+        return self._pratica(identificativo, "Documento arrivato.")
+
     def do_HEAD(self):
         self.do_GET()
 
@@ -157,6 +275,8 @@ def main() -> int:
                          help="dove sta il token salvato")
     ragioni.add_argument("--memoria", default="dati/memoria",
                          help="dove si ricordano le risposte")
+    ragioni.add_argument("--pratiche", default="dati/pratiche",
+                         help="dove stanno le pratiche e i documenti")
     ragioni.add_argument("--finto", action="store_true",
                          help="parla col fornitore finto: non spende niente")
     detto = ragioni.parse_args()
@@ -180,10 +300,16 @@ def main() -> int:
     dati.mkdir(parents=True, exist_ok=True)
     memoria = Path(detto.memoria)
     memoria.mkdir(parents=True, exist_ok=True)
+    # I documenti d'identita' non stanno con tutto il resto, e la cartella
+    # la legge solo chi fa girare il programma.
+    pratiche_dove = Path(detto.pratiche)
+    pratiche_dove.mkdir(parents=True, exist_ok=True)
+    os.chmod(pratiche_dove, 0o700)
 
     server = ThreadingHTTPServer(("127.0.0.1", detto.porta), Porta)
     server.dati = dati
     server.memoria = memoria
+    server.pratiche = pratiche_dove
     if not cliente.configurato(dati):
         print("ATTENZIONE: nessun token. Ogni ricerca fallirà con una "
               "frase che lo spiega. Si mette in TOKEN_VEICOLI, oppure si "

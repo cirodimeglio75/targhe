@@ -32,8 +32,9 @@ per intero e non si spende un centesimo. Prova `CX118GD` (auto grossa),
 
 I due banchi, che girano da soli:
 
-    python3 prove/prova_cliente.py   # il cervello: 25 controlli
-    python3 prove/prova_pagina.py    # la pagina: 23 controlli
+    python3 prove/prova_cliente.py   # il cervello: 31 controlli
+    python3 prove/prova_pagina.py    # la pagina: 26 controlli
+    python3 prove/prova_pratiche.py  # i documenti: 20 controlli
 
 Controllano le cose che sbagliate si pagano: la memoria che non ricorda
 (soldi), il «non risulta» che sembra un guasto (recensioni), il token
@@ -52,6 +53,8 @@ come testo (guai).
 | `veicoli/memoria.py` | ricorda le risposte: la stessa targa non si paga due volte |
 | `veicoli/patente.py` | neopatentati e patente necessaria: il conto lo facciamo noi, costa zero |
 | `veicoli/passaggio.py` | il listino del passaggio di proprietà, dai kW. **Due colonne: solo `pubblico` esce di qui** |
+| `veicoli/pratiche.py` | quali documenti servono per ogni pratica, e dove finiscono quelli caricati |
+| `pagine/pratica.py` | l'elenco dei documenti con le spunte, e i tasti per fotografare |
 | `strumenti/finto_openapi.py` | il fornitore finto del banco, che conta le domande |
 | `prove/prova_cliente.py` | il banco del cervello |
 | `prove/prova_pagina.py` | il banco della pagina |
@@ -123,3 +126,38 @@ Dove la foto del listino non si legge (55, 82, 83-85, 86, 146-147 kW) il
 valore è `None` e la pagina dice che il prezzo va chiesto. Sopra i 147 kW
 il listino finisce e non si estrapola: un prezzo inventato in una
 schermata è una promessa che poi qualcuno deve mantenere allo sportello.
+
+## Le pratiche, e i documenti che ci caricano dentro
+
+Dalla scheda si comincia una pratica: mini passaggio, da società a privato,
+perdita di possesso, immatricolazione. Quali documenti servano lo dice il
+foglio scritto a mano dell'agenzia, non un'idea nostra. La pagina elenca,
+spunta quel che è arrivato e apre la fotocamera del telefono per il resto —
+senza una riga di JavaScript.
+
+**Manca il passaggio fra due privati**, che è il caso più comune di tutti:
+sul foglio non c'è, quindi non è qui. Va chiesto all'agenzia e aggiunto in
+`pratiche.TIPI`. Una lista di documenti inventata manda una persona a
+fotografare le carte due volte.
+
+### Le regole di chi accetta documenti d'identità
+
+Qui dentro non passano file: passano dati personali di chi si fida di noi.
+Tutte queste sono applicate e provate dal banco:
+
+- **il nome che arriva dal telefono non diventa mai un percorso**: si tiene
+  per mostrarlo, si scrive con un nome nostro;
+- **si guarda dentro il file**, non l'estensione: un `.jpg` che comincia con
+  `<?php` non entra. Passano JPG, PNG, HEIC (gli iPhone fotografano così) e
+  PDF;
+- **l'indirizzo della pratica è il permesso**, come il numero di telefono in
+  Ops!: lungo, non indovinabile. Finché non c'è un'identità vera è l'unica
+  protezione, ed è per questo che **i documenti caricati non si riscaricano
+  da nessuna rotta**: entrano e basta;
+- **nei registri finisce l'identificativo della pratica**, mai il nome del
+  documento né la targa;
+- tetti: 8 MB a documento, 12 MB di busta, 20 documenti per pratica.
+
+**Quel che manca, e non è codice**: informativa, tempo di conservazione,
+cancellazione a pratica chiusa, e il modo in cui l'agenzia ritira i
+documenti. Vanno scritti prima che questa roba veda un utente vero.

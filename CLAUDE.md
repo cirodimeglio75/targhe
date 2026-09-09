@@ -59,3 +59,13 @@ con `urllib.request.urlopen` per fare prima.
 `margine()` no: mai in una pagina, mai nel JSON, mai in un registro. È
 protetto dai banchi, non dalla buona volontà — prima di aggiungere una
 riga a una schermata, guarda da quale colonna la stai prendendo.
+
+## I documenti d'identità sono la roba più delicata che tocchiamo
+
+Prima di cambiare qualcosa in `pratiche.py` o nella rotta POST, rileggi le
+regole in testa a quel file. In breve: il nome che arriva non tocca mai il
+disco, il tipo si stabilisce guardando i primi byte, i documenti non si
+riscaricano da nessuna rotta, e nei registri non finiscono né nomi né
+targhe. Il banco `prove/prova_pratiche.py` prova ognuna di queste: se una
+diventa rossa, non è un controllo da aggiustare, è una porta che si è
+aperta.

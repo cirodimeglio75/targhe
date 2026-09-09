@@ -74,6 +74,13 @@ form.massa input { flex:1; min-width:0; border:1px solid var(--riga);
   border-radius:8px; padding:10px 12px; font-size:16px; background:var(--fondo);
   color:var(--inchiostro) }
 form.massa button { padding:10px 16px; font-size:15px }
+form.carica { margin:8px 0 16px; gap:8px; align-items:center }
+form.carica input[type=file] { flex:1; min-width:0; font-size:14px }
+form.carica input[name=motivo] { flex:1; min-width:0; border:1px solid
+  var(--riga); border-radius:8px; padding:10px 12px; font-size:16px;
+  background:var(--fondo); color:var(--inchiostro) }
+form.carica button { padding:10px 16px; font-size:15px }
+.nota-riga { color:var(--tenue); font-size:13px; margin:2px 0 10px }
 a { color:var(--blu) }
 """
 
@@ -167,6 +174,24 @@ def _blocco(titolo: str, voci: List[tuple]) -> str:
             % (_e(titolo), righe))
 
 
+# Le pratiche che sappiamo fare, come le chiama una persona. Manca il
+# passaggio fra due privati, che e' il caso piu' comune: i documenti che
+# vuole non sono sul foglio dell'agenzia, e non si indovinano — vanno
+# chiesti, e allora si aggiunge una riga qui.
+PRATICHE = (("mini", "Mini passaggio"),
+            ("societa-persona", "Da società a privato"),
+            ("perdita", "Perdita di possesso"),
+            ("immatricolazione", "Immatricolazione"))
+
+
+def _pratiche(targa: str) -> str:
+    """I collegamenti per cominciare una pratica su questa targa."""
+    voci = ["<a href='/pratica/nuova?tipo=%s&targa=%s'>%s</a>"
+            % (_e(chiave), _e(targa), _e(nome)) for chiave, nome in PRATICHE]
+    return ("<p class=nota-riga>Vuoi farla con noi? %s</p>"
+            % " · ".join(voci))
+
+
 def scheda(d: Dict[str, Any]) -> str:
     """La scheda di un veicolo, dai nomi che torna `veicoli.scheda`."""
     nome = " ".join(str(x) for x in (d.get("marca"), d.get("modello")) if x)
@@ -240,8 +265,10 @@ def scheda(d: Dict[str, Any]) -> str:
                      "proprietà</p>"
                      "<div class=riga><span class=che>Prezzo</span>"
                      "<span class=quanto>%s €</span></div>"
-                     "<div class=riga><span class=che>%s</span></div></div>"
-                     % (_e(numero(pass_["euro"])), _e(pass_.get("perche", ""))))
+                     "<div class=riga><span class=che>%s</span></div>"
+                     "%s</div>"
+                     % (_e(numero(pass_["euro"])), _e(pass_.get("perche", "")),
+                        _pratiche(d.get("targa", ""))))
     elif pass_.get("perche"):
         # Senza numero si dice il perche' e basta: un prezzo inventato in
         # una schermata e' una promessa che poi qualcuno deve mantenere
