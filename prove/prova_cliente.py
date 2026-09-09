@@ -62,12 +62,16 @@ def main():
     s = cliente.scheda("CX118GD", cartella=cartella)
     deve(s.get("marca") == "KIA", "la marca arriva")
     deve(s.get("kw") == 106, "i kilowatt arrivano")
+    deve(s.get("anno") == "2005" and "immatricolazione" not in s,
+         "dell'immatricolazione arriva l'anno, e non si promette il giorno")
     deve(s["assicurazione"].get("compagnia") == "Generali Italia",
          "la polizza arriva")
+    deve(s["assicurazione"].get("assicurato") is True,
+         "il «e' assicurato» arriva come booleano, non sparisce")
     deve(s["neopatentati"]["si_puo"] is False,
-         "106 kW: non la guida un neopatentato")
+         "106 kW: non la guida un neopatentato, e si sa senza la massa")
     deve(s["patente"] == "B", "ci vuole la B")
-    deve(s["grezzo"].get("euroClass") == "Euro 3",
+    deve(s["grezzo"].get("KType") == "12345",
          "il grezzo si tiene: nessun campo si perde")
 
     print("\nla memoria")
@@ -82,7 +86,31 @@ def main():
     print("\nla moto")
     m = cliente.scheda("AB12345", cartella=cartella)
     deve(m.get("modello") == "CB 650 R", "la moto passa dalla rotta sua")
-    deve(m["patente"] == "A", "70 kW: ci vuole la A")
+    deve("kw" not in m, "della moto il fornitore non manda la potenza")
+    deve(m["patente"] == "A2 o A, secondo la potenza",
+         "senza potenza la patente si dice a meta', invece di indovinare")
+
+    print("\nla massa, che il fornitore non manda")
+    senza = cliente.scheda("DD222DD", cartella=cartella)
+    deve(senza["neopatentati"]["si_puo"] is None
+         and senza["neopatentati"]["serve_massa"] is True,
+         "sotto i 70 kW si chiede la massa invece di inventarla")
+    con = cliente.scheda("DD222DD", cartella=cartella, massa=1100)
+    deve(con["neopatentati"]["si_puo"] is True,
+         "con la massa il conto si chiude: 51 kW su 1100 kg, si puo'")
+    stretta = cliente.scheda("DD222DD", cartella=cartella, massa=850)
+    deve(stretta["neopatentati"]["si_puo"] is False,
+         "e la stessa auto piu' leggera no: 60 kW per tonnellata")
+
+    print("\nla coda del fornitore (302 + check_id)")
+    os.environ["VEICOLI_LENTO"] = "1"
+    lento = cliente.scheda("EE333EE", cartella=cartella,
+                           con_assicurazione=False)
+    deve(lento.get("marca") == "KIA",
+         "sotto carico risponde 302: si aspetta e la risposta arriva")
+    deve(conto().get("/check_id", 0) >= 2,
+         "e si aspetta chiedendo a /check_id, non seguendo il rimando")
+    os.environ["VEICOLI_LENTO"] = ""
 
     print("\nquando va storto")
     try:

@@ -1,8 +1,21 @@
 """Neopatentati e patente necessaria: il conto lo facciamo noi, e costa zero.
 
-Questa e' la riga della schermata che il fornitore non vende, e non serve
-che la venda: i due numeri che servono — i kilowatt e la massa — stanno gia'
-nella risposta che abbiamo pagato per i dati tecnici.
+Questa e' la riga della schermata che il fornitore non vende. Il conto lo
+sappiamo fare, ma **uno dei due numeri che servono non ce l'ha**: dei
+kilowatt e della massa, il servizio manda solo i kilowatt (`PowerKW`), e
+della massa non c'e' traccia — controllato sulla documentazione ufficiale
+il 9/09/2026, non dedotto.
+
+Quindi qui si dice quel che si sa e si ammette il resto:
+
+- **sopra i 70 kW un'automobile e' vietata comunque**, e quello basta da
+  solo: e' il caso piu' comune, e si risponde con certezza;
+- **sotto i 70 kW la risposta dipende dalla massa**, e senza massa non si
+  risponde. La pagina la chiede a chi guarda — sta sul libretto, riga G —
+  e con quella il conto si chiude.
+
+Inventare una massa media sarebbe il modo elegante di dire a un ragazzo
+che puo' guidare un'auto che non puo' guidare.
 
 La regola (art. 117 del Codice della Strada, come riscritto nel 2011) vale
 **per il primo anno** dalla patente B, e chiede due cose insieme:
@@ -30,14 +43,22 @@ def guidabile_da_neopatentato(kw: Optional[float], massa_kg: Optional[float],
     la persona a cercare altrove il perche'.
     """
     categoria = (categoria or "").upper().strip()
-    if not kw or not massa_kg or kw <= 0 or massa_kg <= 0:
-        return {"si_puo": None,
-                "perche": "mancano la potenza o la massa: non posso dirlo"}
-    per_tonnellata = kw / (massa_kg / 1000.0)
+    if not kw or kw <= 0:
+        return {"si_puo": None, "serve_massa": False,
+                "perche": "il fornitore non manda la potenza di questo "
+                          "veicolo: non posso dirlo"}
+    # Il tetto assoluto si controlla PRIMA, perche' non ha bisogno della
+    # massa: e' la risposta che si puo' dare quasi sempre, e con certezza.
     if categoria.startswith("M1") and kw > TETTO_KW:
-        return {"si_puo": False, "kw_per_tonnellata": round(per_tonnellata, 1),
+        return {"si_puo": False, "serve_massa": False,
                 "perche": "supera i 70 kW: nel primo anno di patente B non "
-                          "si può guidare"}
+                          "si può guidare, qualunque sia la massa"}
+    if not massa_kg or massa_kg <= 0:
+        return {"si_puo": None, "serve_massa": True,
+                "perche": "sotto i 70 kW la risposta dipende dalla massa, "
+                          "che il fornitore non manda: sta sul libretto, "
+                          "riga G"}
+    per_tonnellata = kw / (massa_kg / 1000.0)
     if per_tonnellata > TETTO_KW_PER_TONNELLATA:
         return {"si_puo": False, "kw_per_tonnellata": round(per_tonnellata, 1),
                 "perche": "%.1f kW per tonnellata: sopra il limite di 55 del "
@@ -55,7 +76,10 @@ def patente_necessaria(categoria: str = "", cilindrata: Optional[float] = None,
     """Che patente ci vuole per guidarlo, nella grafia che legge una persona.
 
     Per le moto la soglia non e' solo la potenza ma anche il rapporto con la
-    massa: una moto leggera da 35 kW resta fuori dalla A2.
+    massa: una moto leggera da 35 kW resta fuori dalla A2. Di una moto
+    pero' il fornitore manda solo la CILINDRATA — niente potenza, niente
+    massa — quindi sopra i 125 cc la risposta si dichiara incerta invece di
+    tirare a indovinare fra A2 e A.
     """
     categoria = (categoria or "").upper().strip()
     if categoria.startswith("L"):           # ciclomotori e motocicli
@@ -63,11 +87,11 @@ def patente_necessaria(categoria: str = "", cilindrata: Optional[float] = None,
             return "AM"
         if cilindrata and cilindrata <= 125 and (not kw or kw <= 11):
             if not massa_kg or not kw or kw / massa_kg <= 0.1:
-                return "A1"
+                return "A1" if kw else "A1, se non supera 11 kW"
         if kw and kw <= 35:
             if not massa_kg or kw / massa_kg <= 0.2:
                 return "A2"
-        return "A"
+        return "A" if kw else "A2 o A, secondo la potenza"
     if categoria.startswith("N") or (massa_kg and massa_kg > 3500):
         return "C"
     return "B"

@@ -73,14 +73,25 @@ def main():
     deve("KIA" in corpo and "CARNIVAL" in corpo, "marca e modello a schermo")
     deve("106 kW" in corpo and "2.902 cc" in corpo,
          "il motore a schermo, coi numeri scritti in italiano")
-    deve("28 giu 2005" in corpo and "2005-06-28" not in corpo,
-         "le date si leggono in italiano, non all'americana")
+    deve("2005" in corpo and "Anno" in corpo and "Data" not in corpo,
+         "dell'immatricolazione si mostra l'anno, e la riga si chiama Anno")
     deve("Generali Italia" in corpo, "la polizza a schermo")
     deve(">NO<" in corpo and "primo anno" in corpo.lower(),
          "i neopatentati: 106 kW, e si dice di no")
     codice, corpo = chiedi("/targa/CX118GD")
     deve(codice == 200 and "CARNIVAL" in corpo,
          "l'indirizzo da condividere porta alla stessa scheda")
+
+    print("\nla massa, chiesta a chi guarda")
+    codice, corpo = chiedi("/?targa=DD222DD")
+    deve("riga G" in corpo and "name=massa" in corpo,
+         "quando manca la massa, la pagina la chiede invece di arrendersi")
+    codice, corpo = chiedi("/?targa=DD222DD&massa=1100")
+    deve(">SI'<" in corpo and "46,4" in corpo,
+         "scritta la massa, la risposta si chiude e si vede il conto")
+    codice, corpo = chiedi("/?targa=DD222DD&massa=ciao")
+    deve(codice == 200 and "riga G" in corpo,
+         "una massa scritta a caso non rompe niente: vale come non detta")
 
     print("\nle schermate native (stessa rotta, vestito diverso)")
     codice, corpo = chiedi("/targa/CX118GD", json_grazie=True)

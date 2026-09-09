@@ -26,13 +26,14 @@ server non va messo su internet aperto com'è.
     python3 server.py --finto        # poi http://127.0.0.1:8073
 
 `--finto` accende un fornitore finto dentro il server: la pagina funziona
-per intero e non si spende un centesimo. Prova `CX118GD` (auto),
-`AB12345` (moto), `ZZ999ZZ` (targa che non risulta).
+per intero e non si spende un centesimo. Prova `CX118GD` (auto grossa),
+`DD222DD` (auto piccola: chiede la massa), `AB12345` (moto), `ZZ999ZZ`
+(targa che non risulta).
 
 I due banchi, che girano da soli:
 
-    python3 prove/prova_cliente.py   # il cervello: 20 controlli
-    python3 prove/prova_pagina.py    # la pagina: 20 controlli
+    python3 prove/prova_cliente.py   # il cervello: 25 controlli
+    python3 prove/prova_pagina.py    # la pagina: 23 controlli
 
 Controllano le cose che sbagliate si pagano: la memoria che non ricorda
 (soldi), il «non risulta» che sembra un guasto (recensioni), il token
@@ -54,18 +55,43 @@ come testo (guai).
 | `prove/prova_cliente.py` | il banco del cervello |
 | `prove/prova_pagina.py` | il banco della pagina |
 
-## Le due cose ancora da fare prima di fidarsi
+## Cosa manda il fornitore, e cosa no
 
-1. **I nomi dei campi non sono confermati.** Dalla macchina dove è nato
-   questo codice openapi.com è chiuso dal filtro di rete, quindi le mappe in
-   `cliente.CAMPI` accettano più grafie per lo stesso dato e **tengono
-   sempre il grezzo**. Mezz'ora sulla console col nostro token, e si
-   aggiustano lì senza toccare altro.
-2. **La revisione non c'è.** Non l'ho trovata come servizio a sé nel
-   catalogo: o è dentro `/IT-car` (e allora basta aggiungere una riga alle
-   mappe), o serve un secondo fornitore. Il furto e i punti patente non ci
-   sono e non ci saranno da Openapi: perché, sta nello studio
-   (`studi/targa-openapi.md`, nel repository di Ops!).
+I nomi dei campi vengono dalla documentazione ufficiale (*API Reference
+Automotive 1.0.0*, letta il 9/09/2026), non da un'ipotesi. Quel che conta
+è soprattutto la seconda colonna:
+
+| Arriva | Non arriva |
+|---|---|
+| marca, modello, versione, descrizione | la **massa** del veicolo |
+| **anno** di immatricolazione | il giorno e il luogo |
+| cilindrata, alimentazione | la categoria (M1, L3E…) |
+| kW, CV, cavalli fiscali (solo auto) | la **potenza delle moto** |
+| telaio, porte, ABS, airbag, KType | la classe Euro |
+| compagnia, scadenza e stato della polizza | la **revisione** |
+
+Tre conseguenze, tutte visibili nella pagina:
+
+1. **I neopatentati si possono dire per metà.** Sopra i 70 kW un'auto è
+   vietata comunque, e lì si risponde con certezza. Sotto, la risposta
+   dipende dalla massa: la pagina la chiede a chi guarda (sta sul libretto,
+   riga G) invece di inventarne una media. Una massa inventata direbbe a un
+   ragazzo che può guidare un'auto che non può guidare.
+2. **La patente per una moto si dice a metà**: senza potenza, sopra i 125 cc
+   la risposta è «A2 o A, secondo la potenza».
+3. **La revisione per l'Italia non esiste in questo servizio.** C'è solo per
+   il Regno Unito (`/UK-mot`). Era la domanda aperta dello studio: serve un
+   altro fornitore, o si toglie dall'elenco delle cose promesse.
+
+## La coda del fornitore, che non è un errore
+
+Sotto carico il servizio taglia a dieci secondi e risponde **302** con un
+identificativo: la risposta si va a prendere su `/check_id/{id}` finché non
+è pronta. Il rimando **non si segue in automatico** — lo dice la
+documentazione — perché i token valgono per percorso, e seguirlo porterebbe
+il token su una rotta per cui potrebbe non valere: si vedrebbe un «Wrong
+Token» per una richiesta andata benissimo. Il finto fornitore sa fare anche
+questo (`VEICOLI_LENTO=1`), e il banco lo prova.
 
 ## Il token, e perché non c'è una pagina per incollarlo
 

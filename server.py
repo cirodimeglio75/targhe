@@ -7,6 +7,7 @@
 Due rotte e basta:
 
     GET /?targa=AB123CD      la pagina, o la scheda
+    GET /?targa=AB123CD&massa=1400   la stessa, col conto dei neopatentati
     GET /targa/AB123CD       la stessa scheda
 
 La seconda esiste per gli indirizzi da condividere. **Tutte e due
@@ -121,9 +122,17 @@ class Porta(BaseHTTPRequestHandler):
             return self._pagina(veste.ricerca())
 
         fresco = (campi.get("fresco") or ["0"])[0] == "1"
+        # La massa la scrive chi guarda, dal libretto: il fornitore non la
+        # manda e senza non si chiude il conto dei neopatentati. Una massa
+        # storpiata non deve far esplodere niente — vale come «non detta».
+        try:
+            massa = float((campi.get("massa") or ["0"])[0].replace(",", "."))
+        except ValueError:
+            massa = 0.0
         try:
             dati = cliente.scheda(targa, dati=self.server.dati,
-                                  cartella=self.server.memoria, fresco=fresco)
+                                  cartella=self.server.memoria, fresco=fresco,
+                                  massa=massa or None)
         except cliente.VeicoloRifiutato as e:
             # Il codice HTTP segue il senso: una targa che non risulta e'
             # un 404, un credito finito e' un 502 (il guasto e' nostro, non

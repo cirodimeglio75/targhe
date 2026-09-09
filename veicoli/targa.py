@@ -9,9 +9,11 @@ e non costa una chiamata a pagamento.
 
 import re
 
-# Le forme che valgono oggi in Italia. Non e' un elenco completo di tutto
-# quel che e' mai esistito: e' quel che una persona puo' ragionevolmente
-# digitare cercando un veicolo che circola.
+# Le forme che valgono oggi in Italia, tenute vicine a quelle che il
+# fornitore dichiara nella documentazione (Automotive 1.0.0): quel che
+# lui rifiuta non deve nemmeno partire da qui. Le nostre sono un filo piu'
+# strette sulle lettere, perche' le targhe italiane nuove non usano I, O,
+# Q e U — e chi le scrive di solito ha confuso una cifra.
 FORME = (
     # Rimorchi: XA000AA. Sta PRIMA delle auto perche' ne ha la stessa forma:
     # la X iniziale e' riservata ai rimorchi, e le auto non ci sono ancora
@@ -23,8 +25,11 @@ FORME = (
     (re.compile(r"^[A-HJ-NPR-TV-Z]{2}[0-9]{3}[A-HJ-NPR-TV-Z]{2}$"), "auto"),
     # Moto e ciclomotori dal 1999: AA 00000.
     (re.compile(r"^[A-HJ-NPR-TV-Z]{2}[0-9]{5}$"), "moto"),
-    # Auto prima del 1994: sigla della provincia + cifre (MI123456, ROMA…).
-    (re.compile(r"^[A-Z]{2,4}[0-9]{4,6}$"), "auto"),
+    # Auto prima del 1994: sigla della provincia + cifre (MI123456).
+    # Due lettere e sei caratteri, non di piu': e' la forma che il
+    # fornitore dichiara di accettare (`^[a-zA-Z]{2}[a-zA-Z0-9]{6}$`), e
+    # mandargli una targa che rifiuta costa una chiamata per un «no».
+    (re.compile(r"^[A-Z]{2}[A-Z0-9]{6}$"), "auto"),
 )
 
 # Chi scrive a mano confonde queste. Si correggono SOLO dove la posizione

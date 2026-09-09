@@ -36,3 +36,19 @@ cosa che sicuramente non perde dati.
 
 Deve dire «tutto bene». Se una modifica cambia il comportamento apposta, si
 cambia anche il banco nello stesso lotto — mai dopo.
+
+## Non si promette quel che il fornitore non manda
+
+La massa, la categoria, la classe Euro, il giorno di immatricolazione, la
+potenza delle moto e la revisione **non arrivano** (documentazione
+ufficiale Automotive 1.0.0). Dove servono, si chiedono a chi guarda o si
+dichiara di non sapere. Non si stimano, non si deducono dal modello, non
+si prendono da una tabella «di solito è così»: una massa inventata dice a
+un neopatentato che può guidare un'auto che non può guidare.
+
+## Il 302 non è una ridirezione
+
+Sotto carico il fornitore risponde 302 con `/check_id/{id}`: si aspetta
+chiedendo lì, e il rimando NON si segue in automatico (i token valgono per
+percorso). `APRITORE` in `cliente.py` serve a questo — non si sostituisce
+con `urllib.request.urlopen` per fare prima.

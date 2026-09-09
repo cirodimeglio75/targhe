@@ -69,6 +69,11 @@ button { border:0; border-radius:8px; background:var(--blu); color:#fff;
   border-left:4px solid var(--rosso); border-radius:8px; padding:12px 16px;
   margin-bottom:16px }
 .nota { color:var(--tenue); font-size:13px; margin-top:24px }
+form.massa { margin:12px 0 4px; gap:8px }
+form.massa input { flex:1; min-width:0; border:1px solid var(--riga);
+  border-radius:8px; padding:10px 12px; font-size:16px; background:var(--fondo);
+  color:var(--inchiostro) }
+form.massa button { padding:10px 16px; font-size:15px }
 a { color:var(--blu) }
 """
 
@@ -173,18 +178,21 @@ def scheda(d: Dict[str, Any]) -> str:
                  (" · " if d.get("allestimento") else "") + _e(d.get("targa", ""))),
              "</div>"]
 
+    # Di immatricolazione il fornitore manda solo l'ANNO: la riga si chiama
+    # «Anno» e non «Data» apposta — chiamarla «Data» prometterebbe un
+    # giorno che non abbiamo.
     fuori.append(_blocco("Immatricolazione", [
-        ("Data", data(d.get("immatricolazione"))),
-        ("Luogo", d.get("luogo")),
+        ("Anno", d.get("anno")),
         ("Telaio", d.get("telaio")),
+        ("Porte", d.get("porte")),
     ]))
     fuori.append(_blocco("Motore", [
         ("Alimentazione", d.get("alimentazione")),
         ("Cilindrata", numero(d.get("cilindrata"), "cc")),
         ("Potenza", numero(d.get("kw"), "kW")),
         ("Cavalli", numero(d.get("cavalli"), "cv")),
+        ("Cavalli fiscali", d.get("fiscali")),
         ("Massa", numero(d.get("massa"), "kg")),
-        ("Classe", d.get("euro")),
     ]))
 
     ass = d.get("assicurazione") or {}
@@ -208,12 +216,23 @@ def scheda(d: Dict[str, Any]) -> str:
         segno = {True: "<span class=si>SI'</span>",
                  False: "<span class=no>NO</span>"}.get(neo.get("si_puo"),
                                                         "<span>?</span>")
+        # Quando manca solo la massa, la si chiede a chi guarda invece di
+        # arrendersi: sta sul libretto, e con quella la risposta si chiude.
+        # Il numero resta di chi lo scrive — viaggia nell'indirizzo e
+        # nient'altro, non si salva accanto alla targa.
+        chiedila = ("<form action=/ method=get class=massa>"
+                    "<input type=hidden name=targa value='%s'>"
+                    "<input name=massa inputmode=numeric placeholder='kg'>"
+                    "<button>Calcola</button></form>"
+                    % _e(d.get("targa", ""))) if neo.get("serve_massa") else ""
         fuori.append("<div class=carta><p class=gruppo>Neopatentati</p>"
                      "<div class=riga><span class=che>Primo anno di patente B"
                      "</span><span class=quanto>%s</span></div>"
-                     "<div class=riga><span class=che>%s</span></div>%s</div>"
-                     % (segno, _e(neo["perche"]),
-                        _righe([("Patente necessaria", d.get("patente"))])))
+                     "<div class=riga><span class=che>%s</span></div>%s%s</div>"
+                     % (segno, _e(neo["perche"]), chiedila,
+                        _righe([("kW per tonnellata",
+                                 numero(neo.get("kw_per_tonnellata"))),
+                                ("Patente necessaria", d.get("patente"))])))
 
     if d.get("dalla_memoria"):
         # Detto, non nascosto: chi guarda deve sapere che sta leggendo una
