@@ -1,0 +1,45 @@
+# L'unita' di sistema: il programma parte all'accensione e torna su da solo
+# se cade. Si installa in /etc/systemd/system/targhe.service.
+[Unit]
+Description=Targhe — pratiche auto per concessionarie
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=targhe
+Group=targhe
+WorkingDirectory=/opt/targhe
+# Il token del fornitore, la posta, e tutto quel che e' segreto stanno qui
+# dentro, non nella riga di comando: `ps` la legge chiunque sia sulla
+# macchina, un file con i permessi giusti no.
+EnvironmentFile=/etc/targhe/ambiente
+ExecStart=/usr/bin/python3 /opt/targhe/server.py --porta 8073 \
+    --dati /var/lib/targhe --memoria /var/lib/targhe/memoria \
+    --pratiche /var/lib/targhe/pratiche --note /var/lib/targhe/note \
+    --fatture /var/lib/targhe/fatture
+Restart=always
+RestartSec=3
+
+# Le cinghie di sicurezza. Qui dentro passano documenti d'identita': se un
+# giorno qualcuno trova un buco nel programma, deve trovare anche una
+# stanza piccola.
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictNamespaces=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+# L'unico posto dove puo' scrivere.
+ReadWritePaths=/var/lib/targhe
+# Ascolta solo in casa: davanti c'e' Caddy, che fa l'HTTPS.
+IPAddressAllow=localhost
+
+[Install]
+WantedBy=multi-user.target

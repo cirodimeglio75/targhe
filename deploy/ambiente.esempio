@@ -1,0 +1,19 @@
+# I segreti del programma. Si copia in /etc/targhe/ambiente, si riempie, e
+# si mette `chmod 600`: lo legge solo chi fa girare il servizio.
+#
+# NESSUNO di questi valori va scritto in chat, in un messaggio o in un
+# commit. Stanno qui e basta.
+
+# Il token dell'automotive di Openapi (console.openapi.com).
+TOKEN_VEICOLI=
+
+# La posta con cui partono note, fatture e solleciti. Senza, il programma
+# lavora lo stesso e dice che la posta non e' configurata.
+SERVER_POSTA=
+PORTA_POSTA=587
+UTENTE_POSTA=
+PAROLA_POSTA=
+DA_POSTA=Targhe <note@stopandgogaranzie.it>
+
+# L'ora del programma e' quella d'Italia; si tocca solo se serve altro.
+TZ=Europe/Rome

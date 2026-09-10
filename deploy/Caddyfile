@@ -1,0 +1,29 @@
+# Caddy davanti al programma: fa l'HTTPS da solo, prende il certificato da
+# Let's Encrypt e lo rinnova senza che nessuno se ne ricordi.
+#
+# Perche' Caddy e non nginx: tre righe invece di trenta, e il certificato
+# non e' un lavoro da rifare a mano ogni tre mesi.
+
+agenzia.stopandgogaranzie.it {
+	# Il programma ascolta solo su 127.0.0.1: da fuori si passa di qui.
+	reverse_proxy 127.0.0.1:8073
+
+	# Senza questa, il biscotto della sessione esce senza `Secure` —
+	# il programma guarda proprio questa intestazione per capire se
+	# davanti c'e' HTTPS. Caddy la mette da solo, ed e' scritto qui
+	# perche' si veda.
+	header_up X-Forwarded-Proto {scheme}
+
+	# Un documento d'identita' non si mette in nessuna memoria di
+	# passaggio.
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Frame-Options "DENY"
+		-Server
+	}
+
+	encode gzip
+	log {
+		output file /var/log/caddy/targhe.log
+	}
+}
