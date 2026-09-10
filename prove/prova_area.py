@@ -218,8 +218,8 @@ def main():
 
     print("\nil conteggio, e il saldo")
     codice, corpo, _ = chiedi("/area", admin)
-    deve("670" in corpo and "Emetti nota" in corpo,
-         "l'amministrazione vede che c'è da conteggiare")
+    deve("670" in corpo and "Emetti" in corpo,
+         "l'amministrazione vede che c'è da conteggiare, e quanto")
     dati, tipo = modulo({"concessionaria": "rossi"})
     codice, corpo, _ = chiedi("/area/nota", admin, dati, tipo)
     deve(codice == 200 and "Nota emessa" in corpo, "la nota si emette")

@@ -342,7 +342,7 @@ class Porta(BaseHTTPRequestHandler):
         if not targa.strip():
             if self._vuole_json():
                 return self._json({"errore": "manca la targa"}, 400)
-            return self._pagina(veste.ricerca())
+            return self._pagina(veste.ricerca(conto=self._conto()))
 
         fresco = (campi.get("fresco") or ["0"])[0] == "1"
         # La massa la scrive chi guarda, dal libretto: il fornitore non la
@@ -363,11 +363,12 @@ class Porta(BaseHTTPRequestHandler):
             codice = 404 if e.codice == 404 else (400 if not e.codice else 502)
             if self._vuole_json():
                 return self._json({"errore": e.utente}, codice)
-            return self._pagina(veste.ricerca(e.utente, targa), codice)
+            return self._pagina(veste.ricerca(e.utente, targa,
+                                              self._conto()), codice)
 
         if self._vuole_json():
             return self._json(dati)
-        return self._pagina(veste.scheda(dati))
+        return self._pagina(veste.scheda(dati, self._conto()))
 
     # ---------------------------------------------------------- le pratiche
 
@@ -580,7 +581,7 @@ class Porta(BaseHTTPRequestHandler):
         if ruolo == "agenzia":
             return self._pagina(veste_area.agenzia(
                 pratiche.per_concessionaria(self.server.pratiche),
-                conti.concessionarie(self.server.dati)))
+                conti.concessionarie(self.server.dati), conto))
         if ruolo == "amministrazione":
             plafond = [conteggio.quanto_resta(self.server.dati,
                                               self.server.pratiche, c)
@@ -595,13 +596,13 @@ class Porta(BaseHTTPRequestHandler):
                 plafond, conteggio.note(self.server.note), pronte, messaggio,
                 fatture.fisco(self.server.dati),
                 fatture.pronto(self.server.dati),
-                fatture.elenco(self.server.fatture)))
+                fatture.elenco(self.server.fatture), conto))
         suo = conto.get("concessionaria", "")
         return self._pagina(veste_area.concessionaria(
             pratiche.elenco(self.server.pratiche, suo),
             conteggio.quanto_resta(self.server.dati, self.server.pratiche, suo),
             conteggio.note(self.server.note, suo),
-            fatture.elenco(self.server.fatture, suo)))
+            fatture.elenco(self.server.fatture, suo), conto))
 
     def _azione_area(self, strada: str) -> None:
         conto = self._conto()

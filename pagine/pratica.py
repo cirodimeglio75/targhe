@@ -13,18 +13,14 @@ parte, esattamente come un campo del fornitore.
 import html
 from typing import Any, Dict
 
-from .scheda import STILE, _e, numero, telaio
+from .telaio import _e, bollo, data as _data_telaio, numero, soldi, telaio
 
 PAROLE_STATO = {"aperta": "in preparazione", "consegnata": "da lavorare",
                 "finita": "finita", "saldata": "saldata"}
 
 
 def _data(quando: Any) -> str:
-    import time
-    try:
-        return time.strftime("%d/%m/%Y %H:%M", time.localtime(float(quando)))
-    except (TypeError, ValueError):
-        return ""
+    return _data_telaio(quando, con_ora=True)
 
 
 def _messaggi(p: Dict[str, Any]) -> str:
@@ -94,10 +90,8 @@ def pratica(p: Dict[str, Any], tipo: Dict[str, Any],
     if ruolo in ("agenzia", "amministrazione") and p.get("concessionaria"):
         sotto.append(p["concessionaria"])
     if sotto:
-        dentro.append("<p class=sottotitolo>%s <span class=bollo>%s</span></p>"
-                      % (_e(" · ".join(sotto)),
-                         _e(PAROLE_STATO.get(p.get("stato", ""),
-                                             p.get("stato", "")))))
+        dentro.append("<p class=sottotitolo>%s %s</p>"
+                      % (_e(" · ".join(sotto)), bollo(p.get("stato", ""))))
     if messaggio:
         dentro.append("<div class=avviso>%s</div>" % _e(messaggio))
 
@@ -140,4 +134,5 @@ def pratica(p: Dict[str, Any], tipo: Dict[str, Any],
     dentro.append(_messaggi(p))
     dentro.append("<p class=nota>I documenti si aprono solo da qui, e solo "
                   "a chi ha titolo. <a href='/area'>Torna all'elenco</a></p>")
-    return telaio("%s — Targhe" % tipo.get("nome", "Pratica"), "".join(dentro))
+    return telaio(tipo.get("nome", "Pratica"), "".join(dentro), conto,
+                  "/area")

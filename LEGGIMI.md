@@ -62,6 +62,7 @@ come testo (guai).
 | `veicoli/posta.py` | la posta: note, fatture e solleciti, col PDF attaccato |
 | `veicoli/fatture.py` | numerazione, imponibile e anticipazioni, PDF della fattura |
 | `veicoli/orologio.py` | quel che la piattaforma fa da sola: sabato e solleciti |
+| `pagine/telaio.py` | lo stile, la barra in alto, i pezzi che si ripetono. **Non importa pagine** |
 | `pagine/area.py` | le tre aree, una per mestiere |
 | `pagine/pratica.py` | l'elenco dei documenti con le spunte, e i tasti per fotografare |
 | `strumenti/finto_openapi.py` | il fornitore finto del banco, che conta le domande |
@@ -309,3 +310,27 @@ Perciò:
 ### Cosa manca ancora, di questo giro
 - **i documenti restano sul nostro disco**: non c'è un modo per l'agenzia
   di scaricarli in blocco né una cancellazione automatica a pratica chiusa.
+
+## Com'è fatta la faccia
+
+Non è una pagina da telefono: è un **banco di lavoro**, e chi la usa ci sta
+davanti tutto il giorno su uno schermo largo. La prima versione era una
+colonna stretta stirata su un monitor da 27 pollici, ed era il difetto più
+visibile del programma.
+
+Adesso: una barra in alto con chi sei e dove sei, il contenuto che respira
+fino a 1120 pixel, **i numeri che contano in cima** — quelli che
+rispondono alla domanda che uno si fa aprendo la pagina — e sotto le
+**tabelle**, che è come si legge un elenco di pratiche. Gli stati sono
+bollini colorati: in preparazione giallo, da lavorare blu, finita verde,
+scaduta rossa.
+
+Ogni area risponde a una domanda diversa, e i numeri in cima sono quelli:
+
+- **agenzia**: quante pratiche ho da lavorare adesso;
+- **concessionaria**: quanto plafond mi resta;
+- **amministrazione**: quanti soldi ho in ballo e chi deve saldare.
+
+`pagine/telaio.py` tiene lo stile e la barra. Vale la regola di Ops!: **il
+telaio non guarda nessuno** — le pagine importano da lui, lui non importa
+pagine, altrimenti nasce un giro chiuso e Python lo rifiuta.

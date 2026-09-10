@@ -17,98 +17,13 @@ Due cose che qui dentro non si negoziano:
   guasto nostro, mentre una scheda corta sembra semplicemente corta.
 """
 
-import html
 import re
 from typing import Any, Dict, List, Optional
 
+from .telaio import _e, numero, telaio
+
 MESI = ("gen", "feb", "mar", "apr", "mag", "giu",
         "lug", "ago", "set", "ott", "nov", "dic")
-
-STILE = """
-:root { color-scheme: light dark;
-  --fondo:#f4f5f7; --carta:#fff; --inchiostro:#16181d; --tenue:#6b7280;
-  --riga:#e5e7eb; --blu:#1d4ed8; --verde:#15803d; --rosso:#b91c1c; }
-@media (prefers-color-scheme: dark) { :root {
-  --fondo:#0f1115; --carta:#181b21; --inchiostro:#e9eaee; --tenue:#9aa1ad;
-  --riga:#2a2e37; --blu:#60a5fa; --verde:#4ade80; --rosso:#f87171; } }
-* { box-sizing:border-box }
-body { margin:0; padding:24px 16px 64px; background:var(--fondo);
-  color:var(--inchiostro); font:16px/1.5 -apple-system,BlinkMacSystemFont,
-  "Segoe UI",Roboto,sans-serif; }
-.dentro { max-width:640px; margin:0 auto }
-h1 { font-size:22px; margin:0 0 4px }
-.sottotitolo { color:var(--tenue); margin:0 0 24px; font-size:14px }
-form { display:flex; gap:8px; margin-bottom:24px; flex-wrap:wrap }
-.targa { flex:1 1 220px; display:flex; align-items:stretch; min-width:0;
-  border:2px solid var(--inchiostro); border-radius:8px; overflow:hidden;
-  background:#fff }
-.banda { background:#003399; color:#fff; width:28px; display:flex;
-  flex-direction:column; align-items:center; justify-content:center;
-  font-size:11px; font-weight:700; padding:6px 0 }
-.banda span { font-size:9px; letter-spacing:.5px }
-input[name=targa] { flex:1; min-width:0; border:0; padding:12px 10px;
-  font:700 24px/1 monospace; letter-spacing:3px; text-transform:uppercase;
-  color:#111; background:#fff }
-input[name=targa]:focus { outline:2px solid var(--blu); outline-offset:-2px }
-button { border:0; border-radius:8px; background:var(--blu); color:#fff;
-  padding:12px 20px; font-size:16px; font-weight:600; cursor:pointer }
-.carta { background:var(--carta); border:1px solid var(--riga);
-  border-radius:12px; padding:16px; margin-bottom:16px }
-.gruppo { font-size:12px; font-weight:700; letter-spacing:.8px;
-  color:var(--blu); text-transform:uppercase; margin:0 0 8px }
-.riga { display:flex; justify-content:space-between; gap:16px;
-  padding:7px 0; border-bottom:1px solid var(--riga) }
-.riga:last-child { border-bottom:0 }
-.riga .che { color:var(--tenue); font-size:14px }
-.riga .quanto { font-weight:600; text-align:right; overflow-wrap:anywhere }
-.titolone { font-size:20px; font-weight:700; margin:0 0 2px }
-.sotto { color:var(--tenue); font-size:14px; margin:0 }
-.si { color:var(--verde); font-weight:700 }
-.no { color:var(--rosso); font-weight:700 }
-.avviso { background:var(--carta); border:1px solid var(--riga);
-  border-left:4px solid var(--rosso); border-radius:8px; padding:12px 16px;
-  margin-bottom:16px }
-.nota { color:var(--tenue); font-size:13px; margin-top:24px }
-form.massa { margin:12px 0 4px; gap:8px }
-form.massa input { flex:1; min-width:0; border:1px solid var(--riga);
-  border-radius:8px; padding:10px 12px; font-size:16px; background:var(--fondo);
-  color:var(--inchiostro) }
-form.massa button { padding:10px 16px; font-size:15px }
-form.carica { margin:8px 0 16px; gap:8px; align-items:center }
-form.carica input[type=file] { flex:1; min-width:0; font-size:14px }
-form.carica input[name=motivo] { flex:1; min-width:0; border:1px solid
-  var(--riga); border-radius:8px; padding:10px 12px; font-size:16px;
-  background:var(--fondo); color:var(--inchiostro) }
-form.carica button { padding:10px 16px; font-size:15px }
-.nota-riga { color:var(--tenue); font-size:13px; margin:2px 0 10px }
-form.dritto { flex-direction:column; align-items:stretch }
-form.dritto input, form.dritto button { width:100% }
-a.voce { display:grid; grid-template-columns:1fr auto; gap:2px 12px;
-  padding:10px 0; border-bottom:1px solid var(--riga);
-  text-decoration:none; color:var(--inchiostro) }
-a.voce:last-child { border-bottom:0 }
-/* Posate a mano: lasciate all'automatico, testa e prezzo si scambiavano
-   di colonna e il prezzo andava a capo. */
-.voce-testa { grid-column:1; grid-row:1; font-weight:700 }
-.voce-sotto { grid-column:1; grid-row:2; color:var(--tenue); font-size:13px }
-.voce-prezzo { grid-column:2; grid-row:1/3; align-self:center;
-  white-space:nowrap; font-weight:600; color:var(--tenue) }
-.messaggio { padding:10px 0; border-bottom:1px solid var(--riga) }
-.messaggio:last-of-type { border-bottom:0 }
-.messaggio .chi { font-weight:700; font-size:13px }
-.messaggio .quando { color:var(--tenue); font-size:12px; margin-left:6px }
-.messaggio p { margin:2px 0 0; overflow-wrap:anywhere }
-.bollo { display:inline-block; font-size:12px; font-weight:700;
-  padding:2px 8px; border-radius:999px; background:var(--fondo);
-  border:1px solid var(--riga); color:var(--tenue) }
-a { color:var(--blu) }
-"""
-
-
-def _e(s: Any) -> str:
-    """Testo di terzi dentro una pagina: sempre da qui, mai diretto."""
-    return html.escape("" if s is None else str(s), quote=True)
-
 
 def data(valore: Any) -> str:
     """«2005-06-28» diventa «28 giu 2005». Chi legge e' italiano.
@@ -126,33 +41,6 @@ def data(valore: Any) -> str:
     return "%d %s %s" % (int(giorno), MESI[numero - 1], anno)
 
 
-def numero(valore: Any, unita: str = "") -> Optional[str]:
-    """2902 diventa «2.902 cc»: il punto delle migliaia si scrive.
-
-    Torna `None` quando non c'e' niente da mostrare, cosi' la riga sparisce
-    invece di uscire vuota."""
-    if valore in (None, ""):
-        return None
-    try:
-        quanto = float(str(valore).replace(",", "."))
-    except ValueError:
-        return "%s %s" % (valore, unita) if unita else str(valore)
-    scritto = ("{:,.0f}".format(quanto) if quanto == int(quanto)
-               else "{:,.1f}".format(quanto))
-    # In italiano il punto separa le migliaia e la virgola i decimali:
-    # l'inverso dell'inglese, quindi si scambiano in un giro solo.
-    scritto = scritto.replace(",", "@").replace(".", ",").replace("@", ".")
-    return ("%s %s" % (scritto, unita)) if unita else scritto
-
-
-def telaio(titolo: str, dentro: str) -> str:
-    return ("<!doctype html><html lang=it><meta charset=utf-8>"
-            "<meta name=viewport content='width=device-width,initial-scale=1'>"
-            "<title>%s</title><style>%s</style>"
-            "<body><div class=dentro>%s</div>"
-            % (_e(titolo), STILE, dentro))
-
-
 def _cerca(targa: str = "") -> str:
     return ("<form action=/cerca method=get>"
             "<label class=targa>"
@@ -163,15 +51,16 @@ def _cerca(targa: str = "") -> str:
             "<button>Cerca</button></form>" % _e(targa))
 
 
-def ricerca(messaggio: str = "", targa: str = "") -> str:
+def ricerca(messaggio: str = "", targa: str = "",
+            conto: Dict[str, Any] = None) -> str:
     """La pagina d'ingresso. `messaggio` e' il perche', quando c'e'."""
     dentro = ["<h1>Cerca una targa</h1>",
               "<p class=sottotitolo>Dati del veicolo, assicurazione, prezzo "
               "del passaggio — e da qui si comincia una pratica.</p>",
               _cerca(targa)]
     if messaggio:
-        dentro.insert(2, "<div class=avviso>%s</div>" % _e(messaggio))
-    return telaio("Targhe", "".join(dentro))
+        dentro.insert(2, "<div class='avviso male'>%s</div>" % _e(messaggio))
+    return telaio("Cerca una targa", "".join(dentro), conto, "/cerca")
 
 
 def _righe(voci: List[tuple]) -> str:
@@ -212,7 +101,7 @@ def _pratiche(targa: str) -> str:
             % " · ".join(voci))
 
 
-def scheda(d: Dict[str, Any]) -> str:
+def scheda(d: Dict[str, Any], conto: Dict[str, Any] = None) -> str:
     """La scheda di un veicolo, dai nomi che torna `veicoli.scheda`."""
     nome = " ".join(str(x) for x in (d.get("marca"), d.get("modello")) if x)
     fuori = [_cerca(d.get("targa", "")),
@@ -307,4 +196,5 @@ def scheda(d: Dict[str, Any]) -> str:
                      "adesso al fornitore. Per rifare la domanda: "
                      "<a href='/cerca?targa=%s&fresco=1'>chiedi di nuovo</a>.</p>"
                      % _e(d.get("targa", "")))
-    return telaio("%s — Targhe" % (nome or d.get("targa", "")), "".join(fuori))
+    return telaio("%s — Targhe" % (nome or d.get("targa", "")),
+                  "".join(fuori), conto, "/cerca")
