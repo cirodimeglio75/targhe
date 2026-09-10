@@ -58,11 +58,26 @@ Poi, una volta sola:
 
 1. **riempi `/etc/targhe/ambiente`** — il token dell'automotive di Openapi
    e i dati della posta. Il file è già lì, con dentro i nomi dei campi;
-2. **copia `deploy/Caddyfile` in `/etc/caddy/Caddyfile`** e
-   `systemctl reload caddy`;
+2. **aggiungi una riga al Caddyfile.** Lo script scrive il file del sito e
+   ti dice la riga da aggiungere in fondo a `/etc/caddy/Caddyfile`:
+   `import /etc/caddy/agenzia.stopandgogaranzie.it.caddy`. Il Caddyfile che
+   c'è **non viene toccato**: su una macchina che serve già altri siti,
+   sovrascriverlo li spegnerebbe tutti;
 3. **fai il primo conto** dell'amministrazione: il comando esatto lo stampa
    `installa.sh` quando finisce. Senza, non entra nessuno — e non c'è
    registrazione da fuori, apposta.
+
+## Se la macchina ha già altre cose in funzione
+
+`controlla.sh` lo dice. Due casi:
+
+- **la porta 8073 è già occupata**: si sceglie un'altra, e l'installazione
+  la usa dappertutto (unità di sistema e Caddy):
+
+      PORTA=8074 bash deploy/installa.sh
+
+- **Caddy gira già**: bene, non va reinstallato. Lo script scrive solo il
+  file del sito nuovo e lascia il resto com'è.
 
 ## Dopo
 
