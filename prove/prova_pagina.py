@@ -31,6 +31,9 @@ os.environ["BASE_VEICOLI"] = "http://127.0.0.1:%d" % PORTA_FINTA
 os.environ["TOKEN_VEICOLI"] = "finto"
 
 import server                                            # noqa: E402
+from veicoli import conti                                # noqa: E402
+
+CHIAVE = ""      # la sessione, riempita in `main`
 
 GUASTI = []
 
@@ -41,8 +44,11 @@ def deve(condizione, cosa):
         GUASTI.append(cosa)
 
 
-def chiedi(strada, json_grazie=False):
+def chiedi(strada, json_grazie=False, chiave=None):
     r = urllib.request.Request("http://127.0.0.1:%d%s" % (PORTA, strada))
+    chiave = CHIAVE if chiave is None else chiave
+    if chiave:
+        r.add_header("Cookie", "chiave=" + chiave)
     if json_grazie:
         r.add_header("Accept", "application/json")
     try:
@@ -64,11 +70,26 @@ def main():
     threading.Thread(target=casa.serve_forever, daemon=True).start()
     time.sleep(0.3)
 
+    # La ricerca costa: sta dietro l'ingresso, come tutto il resto.
+    global CHIAVE
+    conti.salva_concessionaria(dove, "rossi", "Autosalone Rossi", 9000)
+    CHIAVE = conti.entra(dove, conti.crea(dove, "rossi", "parolalunga1",
+                                          "concessionaria", "rossi",
+                                          "Autosalone Rossi"))
+
+    print("\nil portale")
+    codice, corpo = chiedi("/", chiave="")
+    deve(codice == 401 and "Portale pratiche" in corpo,
+         "chi non e' entrato vede l'ingresso, non la ricerca targhe")
+    codice, corpo = chiedi("/cerca?targa=CX118GD", chiave="")
+    deve(codice == 401 and "Entra per cercare" in corpo,
+         "e non puo' cercare una targa: ogni ricerca costa")
+
     print("\nla pagina")
-    codice, corpo = chiedi("/")
-    deve(codice == 200 and "Scrivi una targa" in corpo,
-         "la pagina d'ingresso si apre")
-    codice, corpo = chiedi("/?targa=CX118GD")
+    codice, corpo = chiedi("/cerca")
+    deve(codice == 200 and "Cerca una targa" in corpo,
+         "chi e' entrato la ricerca ce l'ha")
+    codice, corpo = chiedi("/cerca?targa=CX118GD")
     deve(codice == 200, "la ricerca risponde")
     deve("KIA" in corpo and "CARNIVAL" in corpo, "marca e modello a schermo")
     deve("106 kW" in corpo and "2.902 cc" in corpo,
@@ -83,18 +104,18 @@ def main():
          "l'indirizzo da condividere porta alla stessa scheda")
 
     print("\nla massa, chiesta a chi guarda")
-    codice, corpo = chiedi("/?targa=DD222DD")
+    codice, corpo = chiedi("/cerca?targa=DD222DD")
     deve("riga G" in corpo and "name=massa" in corpo,
          "quando manca la massa, la pagina la chiede invece di arrendersi")
-    codice, corpo = chiedi("/?targa=DD222DD&massa=1100")
+    codice, corpo = chiedi("/cerca?targa=DD222DD&massa=1100")
     deve(">SI'<" in corpo and "46,4" in corpo,
          "scritta la massa, la risposta si chiude e si vede il conto")
-    codice, corpo = chiedi("/?targa=DD222DD&massa=ciao")
+    codice, corpo = chiedi("/cerca?targa=DD222DD&massa=ciao")
     deve(codice == 200 and "riga G" in corpo,
          "una massa scritta a caso non rompe niente: vale come non detta")
 
     print("\nil passaggio di proprieta'")
-    codice, corpo = chiedi("/?targa=CX118GD")
+    codice, corpo = chiedi("/cerca?targa=CX118GD")
     deve("670 €" in corpo and "Passaggio di propriet" in corpo,
          "il prezzo del passaggio a schermo")
     deve("591" not in corpo and "78,5" not in corpo and "78.5" not in corpo,
@@ -110,12 +131,12 @@ def main():
          "la stessa rotta risponde in JSON")
     deve(dentro["neopatentati"]["si_puo"] is False and dentro["patente"] == "B",
          "nel JSON c'e' tutto quel che c'e' nella pagina")
-    codice, corpo = chiedi("/?targa=ZZ999ZZ", json_grazie=True)
+    codice, corpo = chiedi("/cerca?targa=ZZ999ZZ", json_grazie=True)
     deve(codice == 404 and "non risulta" in json.loads(corpo)["errore"],
          "la targa che non risulta e' un 404 anche per il nativo")
 
     print("\nquando il fornitore manda spazzatura")
-    codice, corpo = chiedi("/?targa=AA000AA")
+    codice, corpo = chiedi("/cerca?targa=AA000AA")
     deve(codice == 200, "la scheda esce lo stesso")
     deve("<script>alert(1)</script>" not in corpo,
          "lo script del fornitore NON entra nella pagina")
@@ -124,14 +145,14 @@ def main():
          "nemmeno le virgolette scappano da un attributo")
 
     print("\nquando va storto")
-    codice, corpo = chiedi("/?targa=ciao")
+    codice, corpo = chiedi("/cerca?targa=ciao")
     deve(codice == 400 and "targa italiana" in corpo,
          "una targa senza forma si spiega, e non costa una chiamata")
-    codice, corpo = chiedi("/?targa=ZZ999ZZ")
+    codice, corpo = chiedi("/cerca?targa=ZZ999ZZ")
     deve(codice == 404 and "non risulta" in corpo,
          "la targa che non risulta e' un 404, con la frase giusta")
     os.environ["VEICOLI_ROTTO"] = "402"
-    codice, corpo = chiedi("/?targa=DD111DD")
+    codice, corpo = chiedi("/cerca?targa=DD111DD")
     deve(codice == 502 and "credito" in corpo.lower(),
          "il guasto nostro e' un 502, non un errore addossato a chi chiede")
     os.environ["VEICOLI_ROTTO"] = ""

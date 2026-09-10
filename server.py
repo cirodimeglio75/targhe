@@ -6,8 +6,9 @@
 
 Due rotte e basta:
 
-    GET /?targa=AB123CD      la pagina, o la scheda
-    GET /?targa=AB123CD&massa=1400   la stessa, col conto dei neopatentati
+    GET /                    il portale: chi non e' entrato vede l'ingresso,
+                             chi e' entrato va alla sua area
+    GET /cerca?targa=AB123CD la ricerca per targa, e la scheda
     GET /targa/AB123CD       la stessa scheda
     GET /pratica/nuova?tipo=mini&targa=AB123CD   apre una pratica
     GET /pratica/<id>        i documenti che servono, e dove si caricano
@@ -286,15 +287,34 @@ class Porta(BaseHTTPRequestHandler):
                     return self._json({"errore": e.utente}, 404)
                 return self._pagina(veste.ricerca(e.utente), 404)
 
+        # La porta d'ingresso di questo dominio e' il PORTALE, non la
+        # ricerca targhe: qui ci arrivano agenzia, concessionarie e
+        # amministrazione, e la prima cosa che devono vedere e' il loro
+        # lavoro. La ricerca sta dietro, su /cerca.
+        if strada == "/":
+            if self._conto():
+                return self._rimanda("/area")
+            return self._area()
+
         targa = ""
         if strada.startswith("/targa/"):
             targa = urllib.parse.unquote(strada[len("/targa/"):])
-        elif strada == "/":
+        elif strada == "/cerca":
             targa = (campi.get("targa") or [""])[0]
         else:
             if self._vuole_json():
                 return self._json({"errore": "non esiste"}, 404)
             return self._pagina(veste.ricerca("Questa pagina non esiste."), 404)
+
+        # La ricerca costa venti centesimi a giro: NON si lascia aperta a
+        # chi passa. Su un dominio pubblico una ricerca gratuita e' il
+        # nostro credito nelle mani del primo che cicla le targhe.
+        if not self._conto():
+            if self._vuole_json():
+                return self._json({"errore": "Entra per cercare una targa."},
+                                  401)
+            return self._pagina(veste_area.entra(
+                "Entra per cercare una targa."), 401)
 
         if not targa.strip():
             if self._vuole_json():

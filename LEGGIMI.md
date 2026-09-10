@@ -48,7 +48,7 @@ come testo (guai).
 
 | file | cosa fa |
 |---|---|
-| `server.py` | due rotte: la pagina e `/targa/AB123CD`. Tutte e due rispondono in JSON a chi lo chiede |
+| `server.py` | le rotte. La porta d'ingresso è il **portale**, non la ricerca targhe |
 | `pagine/scheda.py` | la faccia: la ricerca e la scheda. Qui dentro non si chiede niente a nessuno |
 | `veicoli/targa.py` | pulisce e riconosce la targa: una targa storpiata si ferma qui e non costa una chiamata |
 | `veicoli/cliente.py` | chiede a Openapi (`/IT-car`, `/IT-bike`, `/IT-insurance`), traduce, spiega i guasti |
@@ -170,6 +170,15 @@ Tutte queste sono applicate e provate dal banco:
 **Quel che manca, e non è codice**: informativa, tempo di conservazione,
 cancellazione a pratica chiusa, e il modo in cui l'agenzia ritira i
 documenti. Vanno scritti prima che questa roba veda un utente vero.
+
+## La porta d'ingresso è il portale
+
+Su `agenzia.stopandgogaranzie.it` chi arriva vede **l'ingresso del
+portale**, e chi è già entrato va dritto alla sua area. La ricerca per
+targa sta dietro, su `/cerca`, e **anche quella è riservata a chi è
+entrato**: non per gelosia, ma perché ogni ricerca costa venti centesimi
+al fornitore, e una ricerca gratuita su un dominio pubblico è il nostro
+credito nelle mani del primo che cicla le targhe.
 
 ## Il giro: concessionaria → agenzia → amministrazione
 

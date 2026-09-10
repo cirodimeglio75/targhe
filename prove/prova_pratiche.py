@@ -113,7 +113,7 @@ def main():
     CHIAVE = conti.entra(DOVE, conto)
 
     print("\ndalla scheda alla pratica")
-    codice, corpo, _ = chiedi("/?targa=CX118GD")
+    codice, corpo, _ = chiedi("/cerca?targa=CX118GD")
     deve("/pratica/nuova?tipo=mini" in corpo,
          "dalla scheda si comincia una pratica, sulla stessa targa")
     codice, corpo, risposta = chiedi(

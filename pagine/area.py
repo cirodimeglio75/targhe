@@ -31,9 +31,10 @@ PAROLE_STATO = {"aperta": "in preparazione", "consegnata": "da lavorare",
 
 
 def entra(messaggio: str = "") -> str:
-    dentro = ["<h1>Entra</h1>",
-              "<p class=sottotitolo>Area riservata a concessionarie, "
-              "agenzia e amministrazione.</p>"]
+    dentro = ["<h1>Portale pratiche</h1>",
+              "<p class=sottotitolo>Passaggi di proprietà, mini passaggi, "
+              "perdite di possesso e immatricolazioni.<br>Area riservata a "
+              "concessionarie, agenzia e amministrazione.</p>"]
     if messaggio:
         dentro.append("<div class=avviso>%s</div>" % _e(messaggio))
     dentro.append(
@@ -43,7 +44,7 @@ def entra(messaggio: str = "") -> str:
         "<input name=parola type=password placeholder=\"Parola d'ordine\" "
         "autocomplete=current-password required>"
         "<button>Entra</button></form>")
-    return telaio("Entra — Targhe", "".join(dentro))
+    return telaio("Portale pratiche", "".join(dentro))
 
 
 def _riga_pratica(p: Dict[str, Any], con_concessionaria: bool = False) -> str:
@@ -125,9 +126,9 @@ def concessionaria(pratiche: List[Dict[str, Any]], plafond: Dict[str, Any],
 
     dentro.append("<div class=carta><p class=gruppo>Le tue pratiche</p>%s</div>"
                   % ("".join(_riga_pratica(p) for p in pratiche)
-                     or "<p class=sotto>Nessuna pratica. Cerca una targa e "
-                        "comincia da lì.</p>"))
-    coda = ["<a href='/'>Cerca una targa</a>"]
+                     or "<p class=sotto>Nessuna pratica. <a href='/cerca'>"
+                        "Cerca una targa</a> e comincia da lì.</p>"))
+    coda = ["<a href='/cerca'>Cerca una targa</a>"]
     if da_saldare:
         coda.append("<a href='/estratto.pdf'>estratto conto</a>")
     coda.append("<a href='/esci'>esci</a>")

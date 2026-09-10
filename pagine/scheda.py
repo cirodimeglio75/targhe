@@ -154,7 +154,7 @@ def telaio(titolo: str, dentro: str) -> str:
 
 
 def _cerca(targa: str = "") -> str:
-    return ("<form action=/ method=get>"
+    return ("<form action=/cerca method=get>"
             "<label class=targa>"
             "<span class=banda>I<span>ITA</span></span>"
             "<input name=targa value='%s' placeholder='AB123CD' "
@@ -165,9 +165,9 @@ def _cerca(targa: str = "") -> str:
 
 def ricerca(messaggio: str = "", targa: str = "") -> str:
     """La pagina d'ingresso. `messaggio` e' il perche', quando c'e'."""
-    dentro = ["<h1>Targhe</h1>",
-              "<p class=sottotitolo>Scrivi una targa italiana: dati del "
-              "veicolo, assicurazione, e chi lo può guidare.</p>",
+    dentro = ["<h1>Cerca una targa</h1>",
+              "<p class=sottotitolo>Dati del veicolo, assicurazione, prezzo "
+              "del passaggio — e da qui si comincia una pratica.</p>",
               _cerca(targa)]
     if messaggio:
         dentro.insert(2, "<div class=avviso>%s</div>" % _e(messaggio))
@@ -265,7 +265,7 @@ def scheda(d: Dict[str, Any]) -> str:
         # arrendersi: sta sul libretto, e con quella la risposta si chiude.
         # Il numero resta di chi lo scrive — viaggia nell'indirizzo e
         # nient'altro, non si salva accanto alla targa.
-        chiedila = ("<form action=/ method=get class=massa>"
+        chiedila = ("<form action=/cerca method=get class=massa>"
                     "<input type=hidden name=targa value='%s'>"
                     "<input name=massa inputmode=numeric placeholder='kg'>"
                     "<button>Calcola</button></form>"
@@ -297,11 +297,14 @@ def scheda(d: Dict[str, Any]) -> str:
                      "proprietà</p><div class=riga><span class=che>%s</span>"
                      "</div></div>" % _e(pass_["perche"]))
 
+    fuori.append("<p class=nota><a href='/area'>Torna alle tue pratiche</a>"
+                 "</p>")
+
     if d.get("dalla_memoria"):
         # Detto, non nascosto: chi guarda deve sapere che sta leggendo una
         # risposta di ieri, e come si chiede quella di oggi.
         fuori.append("<p class=nota>Dati già in memoria, non richiesti "
                      "adesso al fornitore. Per rifare la domanda: "
-                     "<a href='/?targa=%s&fresco=1'>chiedi di nuovo</a>.</p>"
+                     "<a href='/cerca?targa=%s&fresco=1'>chiedi di nuovo</a>.</p>"
                      % _e(d.get("targa", "")))
     return telaio("%s — Targhe" % (nome or d.get("targa", "")), "".join(fuori))
