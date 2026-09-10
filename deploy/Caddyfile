@@ -22,7 +22,11 @@ agenzia.stopandgogaranzie.it {
 	}
 
 	encode gzip
-	log {
-		output file /var/log/caddy/targhe.log
-	}
+
+	# NIENTE blocco `log` con un file: Caddy scrive gia' nel giornale di
+	# sistema (`journalctl -u caddy`), che e' dove li leggiamo comunque.
+	# Un file in piu' vuol dire una cartella da possedere e una rotazione
+	# da tenere — e infatti la prima volta il ricaricamento e' morto
+	# proprio li': «open /var/log/caddy/targhe.log: permission denied»,
+	# perche' l'utente di Caddy quel file non lo puo' creare.
 }
