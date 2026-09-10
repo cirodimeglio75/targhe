@@ -309,6 +309,19 @@ def main():
     codice, corpo, _ = chiedi("/pratica/" + pratica, agenzia, dati, tipo,
                               origine="https://sito-cattivo.example")
     deve(codice == 403, "un modulo che arriva da un'altra casa non vale")
+    # E il contrario, che e' quello che conta di piu': il modulo mandato
+    # dalla NOSTRA pagina deve passare. La prima volta, dietro il proxy,
+    # veniva rifiutato — cioe' la difesa chiudeva fuori il padrone di casa.
+    dati, tipo = modulo({"messaggio": "questo deve passare"})
+    codice, corpo, _ = chiedi("/pratica/" + pratica, agenzia, dati, tipo,
+                              origine="http://127.0.0.1:%d" % PORTA)
+    deve(codice == 200 and "questo deve passare" in corpo,
+         "e uno che arriva dalla nostra pagina passa")
+    dati, tipo = modulo({"messaggio": "anche con la porta diversa"})
+    codice, corpo, _ = chiedi("/pratica/" + pratica, agenzia, dati, tipo,
+                              origine="https://127.0.0.1")
+    deve(codice == 200,
+         "anche se lo schema e la porta li ha cambiati il proxy davanti")
 
     print("\nuscire")
     codice, corpo, risposta = chiedi("/esci", rossi, segui=False)

@@ -102,17 +102,40 @@ class Porta(BaseHTTPRequestHandler):
         """Se questa POST arriva da un'altra casa.
 
         Il biscotto e' `SameSite=Lax`, che gia' non parte per le richieste
-        di terzi; questo e' il secondo giro di chiave: un `Origin` che non
-        e' il nostro non entra. Le due cose insieme sono la difesa contro
-        il modulo nascosto in un'altra pagina che fa fare a chi e' entrato
-        quello che non voleva fare.
+        di terzi; questo e' il secondo giro di chiave. Ma un secondo giro
+        di chiave che chiude fuori il padrone di casa e' peggio di nessuna
+        chiave — ed e' quel che e' successo la prima volta che qualcuno ha
+        provato a entrare da un browser vero.
+
+        Quindi: si confronta la CASA dell'origine con quella della
+        richiesta, senza schema e senza porta, e dietro un proxy si guarda
+        anche `X-Forwarded-Host`. Nel dubbio si lascia passare, perche' il
+        `SameSite` regge lo stesso. E quando si rifiuta, si scrive nel
+        registro cosa non tornava: senza, e' una porta chiusa senza
+        cartello.
         """
-        origine = self.headers.get("Origin")
-        if not origine:
+        origine = (self.headers.get("Origin") or "").strip()
+        if not origine or origine == "null":
             return False
-        casa = self.headers.get("Host", "")
-        return not (origine.endswith("//" + casa)
-                    or origine.endswith("://" + casa))
+        venuta = urllib.parse.urlsplit(origine).netloc.lower()
+        if not venuta:
+            return False
+
+        def senza_porta(casa: str) -> str:
+            # «casa:443» e «casa» sono la stessa casa. Gli indirizzi IPv6
+            # hanno due punti dappertutto: quelli si lasciano stare.
+            return casa.split(":")[0] if casa.count(":") == 1 else casa
+
+        nostre = {(self.headers.get("Host") or "").lower(),
+                  (self.headers.get("X-Forwarded-Host") or "").lower()}
+        nostre = {c for c in nostre if c}
+        if venuta in nostre or senza_porta(venuta) in {senza_porta(c)
+                                                       for c in nostre}:
+            return False
+        print("%s modulo rifiutato: Origin=%s, Host=%s"
+              % (time.strftime("%H:%M:%S"), venuta, sorted(nostre)),
+              flush=True)
+        return True
 
     def _vuole_json(self) -> bool:
         """Se chi chiama vuole i dati e non la pagina: e' l'app nativa."""
