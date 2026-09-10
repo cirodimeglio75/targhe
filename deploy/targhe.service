@@ -38,8 +38,11 @@ LockPersonality=yes
 MemoryDenyWriteExecute=yes
 # L'unico posto dove puo' scrivere.
 ReadWritePaths=/var/lib/targhe
-# Ascolta solo in casa: davanti c'e' Caddy, che fa l'HTTPS.
-IPAddressAllow=localhost
+# Non si mette `IPAddressAllow=localhost`: da solo non chiude niente
+# (servirebbe `IPAddressDeny=any` accanto), e con quello accanto si
+# chiuderebbe anche l'uscita verso Openapi e verso il server di posta —
+# cioe' il programma smetterebbe di lavorare. Ad ascoltare solo in casa ci
+# pensa il programma, che si lega a 127.0.0.1 e basta.
 
 [Install]
 WantedBy=multi-user.target
