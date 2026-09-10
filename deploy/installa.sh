@@ -55,7 +55,12 @@ fi
 
 CHI_PORTA=$(chi_tiene "$PORTA")
 if [ -n "$CHI_PORTA" ]; then
-	if echo "$CHI_PORTA" | grep -q "$NOME"; then
+	# Alla seconda installazione la porta la tiene il nostro stesso
+	# programma — che pero' si chiama «python3», non «targhe»: si
+	# confronta col numero del processo del servizio, non col nome.
+	MIO_PID=$(systemctl show -p MainPID --value $NOME 2>/dev/null)
+	if [ -n "${MIO_PID:-}" ] && [ "$MIO_PID" != "0" ] \
+			&& echo "$CHI_PORTA" | grep -q "pid=$MIO_PID,"; then
 		echo "-- porta $PORTA: la tiene gia' Targhe, la riprendo"
 	else
 		# Suggerire un numero a caso e' inutile: su questa macchina puo'
