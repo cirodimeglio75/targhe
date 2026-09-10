@@ -63,9 +63,13 @@ Poi, una volta sola:
    `import /etc/caddy/agenzia.stopandgogaranzie.it.caddy`. Il Caddyfile che
    c'è **non viene toccato**: su una macchina che serve già altri siti,
    sovrascriverlo li spegnerebbe tutti;
-3. **fai il primo conto** dell'amministrazione: il comando esatto lo stampa
-   `installa.sh` quando finisce. Senza, non entra nessuno — e non c'è
-   registrazione da fuori, apposta.
+3. **fai il primo conto** dell'amministrazione:
+
+       sudo -u targhe python3 /opt/targhe/strumenti/primo_conto.py
+
+   Chiede tutto lui, e la parola d'ordine non si vede mentre la scrivi e
+   non finisce nella cronologia della shell. Senza un conto non entra
+   nessuno — e non c'è registrazione da fuori, apposta.
 
 ## Se la macchina ha già altre cose in funzione
 

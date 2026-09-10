@@ -137,7 +137,6 @@ echo
 echo "== Il programma gira su 127.0.0.1:$PORTA, e il sito e' $SITO."
 echo
 echo "== Il primo conto (senza, non entra nessuno):"
-echo "   sudo -u $NOME python3 -c \"import sys; sys.path.insert(0,'$CASA'); \\"
-echo "     from pathlib import Path; from veicoli import conti; \\"
-echo "     conti.crea(Path('$DATI'), 'admin', 'UNA-PAROLA-LUNGA', \\"
-echo "     'amministrazione', nome='Amministrazione')\""
+echo "   sudo -u $NOME python3 $CASA/strumenti/primo_conto.py"
+echo "   Chiede tutto lui, e la parola d'ordine NON si vede e non finisce"
+echo "   nella cronologia della shell."

@@ -736,10 +736,8 @@ def main() -> int:
         # Il primo conto non si puo' creare da dentro: senza
         # amministrazione non c'e' nessuno che possa farne una.
         print("Nessun conto. Il primo si fa cosi':\n"
-              "  python3 -c \"from pathlib import Path; "
-              "from veicoli import conti; "
-              "conti.crea(Path('%s'), 'admin', 'parolalunga', "
-              "'amministrazione', nome='Amministrazione')\""
+              "  python3 strumenti/primo_conto.py %s\n"
+              "(chiede tutto lui, e la parola d'ordine non si vede)"
               % dati, flush=True)
     if not cliente.configurato(dati):
         print("ATTENZIONE: nessun token. Ogni ricerca fallirà con una "
