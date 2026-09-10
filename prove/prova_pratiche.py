@@ -98,6 +98,8 @@ def main():
     casa.memoria = DOVE / "memoria"
     casa.pratiche = DOVE / "pratiche"
     casa.note = DOVE / "note"
+    casa.fatture = DOVE / "fatture"
+    casa.fatture.mkdir(parents=True, exist_ok=True)
     casa.note.mkdir(parents=True, exist_ok=True)
     threading.Thread(target=casa.serve_forever, daemon=True).start()
     time.sleep(0.3)

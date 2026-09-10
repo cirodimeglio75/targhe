@@ -85,6 +85,15 @@ GIORNI = ("lunedì", "martedì", "mercoledì", "giovedì", "venerdì", "sabato",
           "domenica")
 
 
+def _lunedi_dopo(quando: float) -> int:
+    """Il momento in cui scade: lunedi' dopo l'emissione, a fine giornata."""
+    giorno = time.localtime(quando)
+    quanti = (7 - giorno.tm_wday) or 7
+    lunedi = time.localtime(quando + quanti * 86400)
+    return int(time.mktime((lunedi.tm_year, lunedi.tm_mon, lunedi.tm_mday,
+                            23, 59, 59, 0, 0, -1)))
+
+
 def entro_quando(quando: float) -> str:
     """Il lunedi' entro cui si salda, scritto per esteso.
 
@@ -170,20 +179,35 @@ def settimana(quando: Optional[float] = None) -> str:
 
 
 def emetti(cartella_note: Path, cartella_pratiche: Path,
-           concessionaria: str, nome: str = "") -> Dict[str, Any]:
+           concessionaria: str, nome: str = "",
+           adesso: Optional[float] = None) -> Dict[str, Any]:
     """La nota di saldo per una concessionaria: le pratiche finite e il totale.
 
     Si prendono le pratiche **finite** e non ancora saldate. Quelle ancora
     aperte non entrano: si paga il lavoro fatto, non quello in corso.
     """
-    righe = [p for p in pr.elenco(cartella_pratiche, concessionaria, "finita")]
+    # Solo le pratiche finite che non sono GIA' in una nota: una nota
+    # emessa e non ancora pagata lascia la pratica «finita», ed e' giusto
+    # (il plafond resta occupato finche' non si salda), ma rimetterla nella
+    # nota della settimana dopo vorrebbe dire fatturarla due volte.
+    righe = [p for p in pr.elenco(cartella_pratiche, concessionaria, "finita")
+             if not p.get("nota")]
     if not righe:
         raise ConteggioRifiutato(
             "Non c'è niente da conteggiare per questa concessionaria.")
-    identificativo = "%s-%s-%s" % (settimana(), concessionaria,
-                                   secrets.token_hex(3))
+    identificativo = "%s-%s-%s" % (settimana(adesso or time.time()),
+                                   concessionaria, secrets.token_hex(3))
+    # L'ora la porta chi chiama: l'orologio sa quando sta girando, e la
+    # settimana scritta sulla nota dev'essere QUELLA, non quella
+    # dell'istante in cui il file viene scritto.
+    adesso = int(adesso or time.time())
     nota = {"id": identificativo, "concessionaria": concessionaria,
-            "settimana": settimana(), "quando": int(time.time()),
+            "settimana": settimana(adesso), "quando": adesso,
+            # La scadenza si CONSERVA, non si ricalcola: quella scritta sul
+            # PDF che il cliente ha in mano e' questa, e deve restare
+            # questa anche se un giorno cambiasse la regola del lunedi'.
+            "scadenza": entro_quando(adesso),
+            "scade_il": _lunedi_dopo(adesso),
             "saldata": False,
             "righe": [{"pratica": p["id"], "targa": p.get("targa", ""),
                        "tipo": p.get("tipo", ""),
@@ -202,6 +226,14 @@ def emetti(cartella_note: Path, cartella_pratiche: Path,
     carta = percorso.with_suffix(".pdf")
     carta.write_bytes(foglio(nota, nome or concessionaria))
     os.chmod(carta, 0o600)
+    # Adesso che la nota esiste, le pratiche ci sono dentro e non tornano
+    # in quella della settimana prossima.
+    for voce in nota["righe"]:
+        try:
+            pr.segna_in_nota(cartella_pratiche, voce["pratica"],
+                             identificativo)
+        except pr.PraticaRifiutata:
+            continue
     return nota
 
 
@@ -257,3 +289,60 @@ def segna_saldata(cartella_note: Path, cartella_pratiche: Path,
     os.chmod(provvisorio, 0o600)
     provvisorio.replace(percorso)
     return nota
+
+
+def scadute(cartella_note: Path, concessionaria: str = "",
+            adesso: Optional[float] = None) -> List[Dict[str, Any]]:
+    """Le note non saldate il cui lunedi' e' passato."""
+    adesso = adesso or time.time()
+    return [n for n in note(cartella_note, concessionaria)
+            if not n.get("saldata") and n.get("scade_il", 0) < adesso]
+
+
+def da_saldare(cartella_note: Path,
+               concessionaria: str = "") -> List[Dict[str, Any]]:
+    return [n for n in note(cartella_note, concessionaria)
+            if not n.get("saldata")]
+
+
+def estratto(concessionaria: str, nome: str, aperte: List[Dict[str, Any]],
+             adesso: Optional[float] = None) -> bytes:
+    """L'estratto conto: tutto quel che resta da pagare, su un foglio.
+
+    E' l'allegato del sollecito. Non ripete le pratiche una per una: chi
+    riceve un sollecito vuole sapere **quanto** deve e **da quando**, e le
+    righe le ha gia' sulle note.
+    """
+    adesso = adesso or time.time()
+    pezzi = [
+        pdf.testo(60, 780, "Estratto conto", 22, True),
+        pdf.testo(60, 758, "Al %s"
+                  % time.strftime("%d/%m/%Y", time.localtime(adesso)), 11),
+        pdf.riga(60, 748, 535, 748),
+        pdf.testo(60, 726, nome or concessionaria, 13, True),
+        pdf.testo(60, 690, "Nota", 10, True),
+        pdf.testo(200, 690, "Scadenza", 10, True),
+        pdf.testo(330, 690, "Stato", 10, True),
+        pdf.testo(440, 690, "Importo", 10, True),
+        pdf.riga(60, 682, 535, 682),
+    ]
+    y = 664
+    totale = 0.0
+    for nota in aperte:
+        scaduta = nota.get("scade_il", 0) < adesso
+        totale += float(nota.get("totale") or 0)
+        pezzi += [pdf.testo(60, y, "Settimana %s" % nota.get("settimana", ""), 10),
+                  pdf.testo(200, y, nota.get("scadenza", ""), 10),
+                  pdf.testo(330, y, "SCADUTA" if scaduta else "da saldare",
+                            10, scaduta),
+                  pdf.testo(440, y, _soldi(nota.get("totale", 0)), 10)]
+        y -= 19
+        if y < 180:
+            break
+    pezzi.append(pdf.riga(60, y + 8, 535, y + 8))
+    pezzi.append(pdf.testo(330, y - 14, "Totale dovuto", 13, True))
+    pezzi.append(pdf.testo(440, y - 14, _soldi(totale), 13, True))
+    pezzi.append(pdf.testo(60, 96, "Il saldo libera il plafond: finché "
+                                   "resta aperto, le pratiche nuove si "
+                                   "fermano.", 10))
+    return pdf.fabbrica([pezzi], "Estratto conto %s" % concessionaria)

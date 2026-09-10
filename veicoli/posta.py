@@ -49,24 +49,29 @@ def configurata() -> bool:
 
 
 def componi(a: str, oggetto: str, testo: str, allegato: bytes = b"",
-            nome_allegato: str = "") -> EmailMessage:
+            nome_allegato: str = "", allegati=()) -> EmailMessage:
     dentro = da_ambiente()
     messaggio = EmailMessage()
     messaggio["From"] = dentro["da"] or "targhe@localhost"
     messaggio["To"] = a
     messaggio["Subject"] = oggetto
     messaggio.set_content(testo)
-    if allegato:
-        messaggio.add_attachment(allegato, maintype="application",
-                                 subtype="pdf",
-                                 filename=nome_allegato or "nota.pdf")
+    # Un allegato solo o tanti: il sollecito porta l'estratto conto e le
+    # fatture insieme, e chi lo riceve deve trovare tutto in una busta.
+    tutti = list(allegati) or ([(nome_allegato or "nota.pdf", allegato)]
+                               if allegato else [])
+    for nome, dato in tutti:
+        if not dato:
+            continue
+        messaggio.add_attachment(dato, maintype="application", subtype="pdf",
+                                 filename=nome)
     return messaggio
 
 
 def manda(a: str, oggetto: str, testo: str, allegato: bytes = b"",
           nome_allegato: str = "", prova: bool = False,
-          spedizioniere: Optional[Callable[[EmailMessage], None]] = None
-          ) -> bool:
+          spedizioniere: Optional[Callable[[EmailMessage], None]] = None,
+          allegati=()) -> bool:
     """Manda il messaggio. Torna `True` se e' partito davvero.
 
     `prova` costruisce tutto e non manda: la stessa strada, senza il
@@ -77,7 +82,7 @@ def manda(a: str, oggetto: str, testo: str, allegato: bytes = b"",
         raise PostaRifiutata("nessun destinatario",
                              "Questa concessionaria non ha un indirizzo di "
                              "posta: aggiungilo per mandarle la nota.")
-    messaggio = componi(a, oggetto, testo, allegato, nome_allegato)
+    messaggio = componi(a, oggetto, testo, allegato, nome_allegato, allegati)
     if spedizioniere is not None:
         spedizioniere(messaggio)
         return True

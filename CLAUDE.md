@@ -83,3 +83,17 @@ controllo da aggiustare, è un cliente che legge i dati di un altro cliente.
 «consegnata» vuol dire che i documenti ci sono, e si ricalcola guardando.
 «finita» richiede il documento e la ricevuta. Non aggiungere un tasto che
 imposti uno stato a mano: il conteggio del sabato si fida di quegli stati.
+
+## Le fatture non si toccano alla leggera
+
+Numerazione progressiva senza buchi né doppioni, imponibile separato dalle
+anticipazioni art. 15, e niente emissione senza i dati fiscali. Prima di
+cambiare qualcosa in `fatture.py`, rileggi i tre freni in testa al file: due
+sono lì perché la risposta la deve dare un commercialista, non noi.
+
+## L'orologio non deve mai fermarsi
+
+`orologio.giro()` si può chiamare quante volte si vuole e non ripete quel
+che ha già fatto: è il registro a garantirlo, non la fortuna. E il filo che
+lo chiama ingoia qualunque guasto: un orologio che si ferma alla prima
+posta rifiutata è un orologio che nessuno si accorge che è fermo.

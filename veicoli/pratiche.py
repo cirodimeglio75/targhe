@@ -386,6 +386,23 @@ def chiudi(cartella: Path, identificativo: str) -> Dict[str, Any]:
     return leggi(cartella, identificativo)
 
 
+def segna_in_nota(cartella: Path, identificativo: str, nota: str) -> None:
+    """Questa pratica e' finita in una nota di saldo: non ci finira' piu'.
+
+    Senza questo segno, la nota della settimana dopo riconterebbe le
+    pratiche di quella prima — sono ancora «finita», perche' finita vuol
+    dire lavorata, non pagata. Il banco l'ha trovato al secondo sabato
+    simulato: una concessionaria si sarebbe vista fatturare due volte lo
+    stesso lavoro.
+    """
+    pratica = leggi(cartella, identificativo)
+    casa = _dove(cartella, identificativo)
+    pratica["nota"] = nota
+    for volatile in ("manca", "completa"):
+        pratica.pop(volatile, None)
+    _scrivi(casa, pratica)
+
+
 def segna_saldata(cartella: Path, identificativo: str, nota: str) -> None:
     pratica = leggi(cartella, identificativo)
     casa = _dove(cartella, identificativo)

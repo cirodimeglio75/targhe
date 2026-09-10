@@ -36,6 +36,7 @@ I due banchi, che girano da soli:
     python3 prove/prova_pagina.py    # la pagina: 26 controlli
     python3 prove/prova_pratiche.py  # i documenti: 19 controlli
     python3 prove/prova_area.py      # il giro intero: 41 controlli
+    python3 prove/prova_orologio.py  # sabato, fatture, solleciti: 25 controlli
 
 Controllano le cose che sbagliate si pagano: la memoria che non ricorda
 (soldi), il «non risulta» che sembra un guasto (recensioni), il token
@@ -58,7 +59,9 @@ come testo (guai).
 | `veicoli/conti.py` | chi entra: concessionaria, agenzia, amministrazione |
 | `veicoli/conteggio.py` | plafond, conteggio del sabato, nota di saldo e il suo PDF |
 | `veicoli/pdf.py` | un PDF scritto a mano, senza librerie |
-| `veicoli/posta.py` | la nota che arriva per posta, col PDF attaccato |
+| `veicoli/posta.py` | la posta: note, fatture e solleciti, col PDF attaccato |
+| `veicoli/fatture.py` | numerazione, imponibile e anticipazioni, PDF della fattura |
+| `veicoli/orologio.py` | quel che la piattaforma fa da sola: sabato e solleciti |
 | `pagine/area.py` | le tre aree, una per mestiere |
 | `pagine/pratica.py` | l'elenco dei documenti con le spunte, e i tasti per fotografare |
 | `strumenti/finto_openapi.py` | il fornitore finto del banco, che conta le domande |
@@ -244,9 +247,56 @@ fallisce: la nota resta scaricabile e l'amministrazione **legge** che non
 L'indirizzo della concessionaria si mette dall'area amministrazione. Se è
 vuoto la nota non parte, e lo si legge.
 
-### Cosa manca ancora, di questo giro
+## L'orologio: quel che succede senza che nessuno prema
 
-- **nessuno sollecita il lunedì**: il plafond resta occupato finché non si
-  salda, e quello frena da solo, ma un promemoria non c'è;
+Un filo dentro il server batte **una volta all'ora**. Due appuntamenti:
+
+- **sabato mattina** (dalle 7): per ogni concessionaria con pratiche
+  finite si emette la nota, si emette la **fattura**, e partono per posta
+  con i PDF attaccati;
+- **ogni giorno**: chi non ha saldato entro il lunedì riceve un
+  **sollecito con l'estratto conto** allegato — uno ogni **tre giorni**,
+  non di più: chi è in ritardo lo sa già, e scrivergli ogni ora fa finire
+  la posta nello spam, da dove non esce più.
+
+Tre regole che tengono in piedi una cosa che gira da sola: si tiene il
+**registro** di quel che si è già fatto (una settimana chiusa non si
+richiude, un sollecito non si ripete); **un guasto su una concessionaria
+non ferma le altre**; e il giro **non fa mai cadere il filo** — un guasto
+si scrive e si aspetta il giro dopo.
+
+Si può anche far girare a mano, o da un cron di sistema:
+
+    python3 server.py --giro          # un giro solo, poi chiude
+
+Una cosa che il banco ha trovato e che nessuno avrebbe visto prima del
+secondo sabato: **una pratica finita entra in una nota sola**. Restava
+«finita» anche dopo la nota — ed è giusto, perché il plafond resta
+occupato finché non si salda — ma senza un segno sarebbe rientrata nella
+nota della settimana dopo, cioè fatturata due volte.
+
+## Le fatture, e i tre freni dichiarati
+
+La fattura esce insieme alla nota, numerata **progressiva per anno** (il
+contatore si alza sotto chiave: un numero saltato è un problema piccolo,
+due fatture con lo stesso numero è un problema grosso).
+
+Ma una fattura è un documento fiscale, e sbagliarla costa a chi la emette.
+Perciò:
+
+1. **senza i dati fiscali di chi emette non si emette niente**, e lo si
+   legge nell'area amministrazione invece di scoprirlo il sabato mattina;
+2. **l'importo si divide in due**: il **compenso** dell'agenzia, che è
+   imponibile e prende l'IVA, e il resto, che è **anticipazione in nome e
+   per conto** (art. 15 DPR 633/72) e resta fuori campo. Quanto sia il
+   compenso per ogni tipo di pratica **lo dice il commercialista**, non
+   questo programma: finché vale zero, la piattaforma si rifiuta di
+   emettere una fattura tutta fuori campo, che sarebbe sbagliata;
+3. **la fattura elettronica non c'è.** Questo è il PDF che legge una
+   persona; per mandarla allo SdI serve un canale — e Openapi, che è già
+   il nostro fornitore, ne ha uno. È un pezzo a parte, dichiarato e non
+   nascosto.
+
+### Cosa manca ancora, di questo giro
 - **i documenti restano sul nostro disco**: non c'è un modo per l'agenzia
   di scaricarli in blocco né una cancellazione automatica a pratica chiusa.

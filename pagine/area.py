@@ -87,7 +87,8 @@ def agenzia(gruppi: Dict[str, List[Dict[str, Any]]],
 
 
 def concessionaria(pratiche: List[Dict[str, Any]], plafond: Dict[str, Any],
-                   note: List[Dict[str, Any]]) -> str:
+                   note: List[Dict[str, Any]],
+                   fatture: List[Dict[str, Any]] = ()) -> str:
     dentro = ["<h1>%s</h1>" % _e(plafond.get("nome", "Le tue pratiche"))]
     resta = plafond.get("resta", 0)
     dentro.append(
@@ -112,19 +113,36 @@ def concessionaria(pratiche: List[Dict[str, Any]], plafond: Dict[str, Any],
                              _e(numero(n.get("totale", 0))), _e(n.get("id", "")))
                           for n in da_saldare))
 
+    if fatture:
+        dentro.append(
+            "<div class=carta><p class=gruppo>Fatture</p>%s</div>"
+            % "".join("<div class=riga><span class=che>n. %s del %s</span>"
+                      "<span class=quanto>%s € · <a href='/fattura/%s.pdf'>"
+                      "PDF</a></span></div>"
+                      % (_e(f.get("numero", "")), _e(_data(f.get("quando"))[:10]),
+                         _e(numero(f.get("conti", {}).get("totale", 0))),
+                         _e(f.get("id", ""))) for f in fatture))
+
     dentro.append("<div class=carta><p class=gruppo>Le tue pratiche</p>%s</div>"
                   % ("".join(_riga_pratica(p) for p in pratiche)
                      or "<p class=sotto>Nessuna pratica. Cerca una targa e "
                         "comincia da lì.</p>"))
-    dentro.append("<p class=nota><a href='/'>Cerca una targa</a> · "
-                  "<a href='/esci'>esci</a></p>")
+    coda = ["<a href='/'>Cerca una targa</a>"]
+    if da_saldare:
+        coda.append("<a href='/estratto.pdf'>estratto conto</a>")
+    coda.append("<a href='/esci'>esci</a>")
+    dentro.append("<p class=nota>%s</p>" % " · ".join(coda))
     return telaio("Le tue pratiche — Targhe", "".join(dentro))
 
 
 def amministrazione(conti_plafond: List[Dict[str, Any]],
                     note: List[Dict[str, Any]],
                     da_conteggiare: Dict[str, float],
-                    messaggio: str = "") -> str:
+                    messaggio: str = "",
+                    fisco: Dict[str, Any] = None,
+                    guasto_fisco: str = "",
+                    fatture: List[Dict[str, Any]] = ()) -> str:
+    fisco = fisco or {}
     dentro = ["<h1>Amministrazione</h1>"]
     if messaggio:
         dentro.append("<div class=avviso>%s</div>" % _e(messaggio))
@@ -186,6 +204,43 @@ def amministrazione(conti_plafond: List[Dict[str, Any]],
 
     # Un modulo solo: i quattro campi partono insieme o non parte niente.
     # Due moduli affiancati sembrano uno e mandano meta' dei dati.
+    if fatture:
+        dentro.append(
+            "<div class=carta><p class=gruppo>Fatture</p>%s</div>"
+            % "".join("<div class=riga><span class=che>n. %s · %s</span>"
+                      "<span class=quanto>%s € · <a href='/fattura/%s.pdf'>"
+                      "PDF</a></span></div>"
+                      % (_e(f.get("numero", "")), _e(f.get("concessionaria", "")),
+                         _e(numero(f.get("conti", {}).get("totale", 0))),
+                         _e(f.get("id", ""))) for f in fatture[:20]))
+
+    # I dati fiscali: senza questi la piattaforma NON emette fatture, e lo
+    # dice qui invece di scoprirlo il sabato mattina.
+    campi = [("ragione_sociale", "Ragione sociale"), ("piva", "Partita IVA"),
+             ("codice_fiscale", "Codice fiscale"), ("indirizzo", "Indirizzo"),
+             ("cap", "CAP"), ("citta", "Città"), ("provincia", "Provincia"),
+             ("iban", "IBAN"), ("iva", "Aliquota IVA %")]
+    moduli = "".join(
+        "<input name='%s' placeholder='%s' value='%s'>"
+        % (_e(chiave), _e(nome), _e(fisco.get(chiave, "")))
+        for chiave, nome in campi)
+    compensi = "".join(
+        "<input name='compenso_%s' inputmode=decimal "
+        "placeholder='Compenso — %s' value='%s'>"
+        % (_e(chiave), _e(voce["nome"]),
+           _e((fisco.get("compensi") or {}).get(chiave, "")))
+        for chiave, voce in TIPI.items())
+    dentro.append(
+        "<div class=carta><p class=gruppo>Dati per le fatture</p>%s"
+        "<form action=/area/fisco method=post class='carica dritto'>%s%s"
+        "<button>Salva</button></form>"
+        "<p class=nota-riga>Il <b>compenso</b> è la parte imponibile: il "
+        "resto dell'importo è anticipazione in nome e per conto (art. 15 "
+        "DPR 633/72), fuori campo IVA. Quanto sia, lo dice il "
+        "commercialista.</p></div>"
+        % (("<div class=avviso>%s</div>" % _e(guasto_fisco))
+           if guasto_fisco else "", moduli, compensi))
+
     dentro.append(
         "<div class=carta><p class=gruppo>Conto nuovo</p>"
         "<form action=/area/conto method=post class='carica dritto'>"

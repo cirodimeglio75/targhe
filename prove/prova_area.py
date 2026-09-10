@@ -104,13 +104,15 @@ def modulo(campi, file_campo=None, contenuto=b"", nome_file="foto.jpg"):
 def main():
     finto = ThreadingHTTPServer(("127.0.0.1", PORTA_FINTA), finto_openapi.H)
     threading.Thread(target=finto.serve_forever, daemon=True).start()
-    for pezzo in ("memoria", "pratiche", "note"):
+    for pezzo in ("memoria", "pratiche", "note", "fatture"):
         (DOVE / pezzo).mkdir(parents=True, exist_ok=True)
     casa = ThreadingHTTPServer(("127.0.0.1", PORTA), server.Porta)
     casa.dati = DOVE
     casa.memoria = DOVE / "memoria"
     casa.pratiche = DOVE / "pratiche"
     casa.note = DOVE / "note"
+    casa.fatture = DOVE / "fatture"
+    casa.fatture.mkdir(parents=True, exist_ok=True)
     threading.Thread(target=casa.serve_forever, daemon=True).start()
     time.sleep(0.3)
 

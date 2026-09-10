@@ -35,6 +35,7 @@ import argparse
 import json
 import os
 import sys
+import threading
 import time
 import urllib.parse
 from email.parser import BytesParser
@@ -57,7 +58,8 @@ time.tzset()
 from pagine import area as veste_area        # noqa: E402
 from pagine import pratica as veste_pratica  # noqa: E402
 from pagine import scheda as veste           # noqa: E402
-from veicoli import cliente, conteggio, conti, posta, pratiche  # noqa: E402
+from veicoli import (cliente, conteggio, conti, fatture, orologio,  # noqa: E402
+                     posta, pratiche)
 
 
 # Quanto corpo si accetta in una volta. Il documento singolo ha il suo
@@ -177,6 +179,36 @@ class Porta(BaseHTTPRequestHandler):
             return self._rimanda("/entra", self._biscotto("", spegni=True))
         if strada == "/area":
             return self._area()
+        if strada == "/estratto.pdf":
+            conto = self._conto()
+            if not conto or conto.get("ruolo") != "concessionaria":
+                return self._pagina(veste_area.entra(
+                    "Entra come concessionaria per l'estratto conto."), 401)
+            quale = conto.get("concessionaria", "")
+            dentro = conti.concessionaria(self.server.dati, quale)
+            dato = conteggio.estratto(
+                quale, dentro.get("nome", quale),
+                conteggio.da_saldare(self.server.note, quale))
+            return self._carta(dato, "estratto-conto.pdf")
+
+        if strada.startswith("/fattura/") and strada.endswith(".pdf"):
+            quale = strada[len("/fattura/"):-len(".pdf")]
+            try:
+                conto = self._conto()
+                fattura = fatture.leggi(self.server.fatture, quale)
+                suo = (conto or {}).get("ruolo") == "concessionaria" and \
+                    conto.get("concessionaria") == fattura.get("concessionaria")
+                if not conto or not (conto.get("ruolo") == "amministrazione"
+                                     or suo):
+                    raise fatture.FatturaRifiutata("Questa fattura non esiste.")
+                return self._carta(fatture.carta(self.server.fatture, quale),
+                                   "fattura-%s.pdf"
+                                   % fattura.get("numero", "").replace("/", "-"))
+            except fatture.FatturaRifiutata as e:
+                if self._vuole_json():
+                    return self._json({"errore": e.utente}, 404)
+                return self._pagina(veste_area.entra(e.utente), 404)
+
         if strada.startswith("/nota/") and strada.endswith(".pdf"):
             try:
                 return self._nota_in_pdf(
@@ -429,13 +461,21 @@ class Porta(BaseHTTPRequestHandler):
         if not conto or not (conto.get("ruolo") in ("agenzia",
                                                     "amministrazione") or suo):
             raise conteggio.ConteggioRifiutato("Questa nota non esiste.")
-        dato = conteggio.carta(self.server.note, identificativo)
+        return self._carta(conteggio.carta(self.server.note, identificativo),
+                           "nota-%s.pdf" % nota.get("settimana", "saldo"))
+
+    def _carta(self, dato: bytes, nome: str) -> None:
+        """Un PDF a chi ha gia' avuto il permesso di riceverlo.
+
+        I permessi li ha controllati chi chiama: questa funzione veste e
+        basta. `sandbox` e `nosniff` valgono anche per un documento che
+        abbiamo fabbricato noi — costano niente, e il giorno che il PDF
+        arriva da qualcun altro la difesa e' gia' li'."""
         self.send_response(200)
         self.send_header("Content-Type", "application/pdf")
         self.send_header("Content-Length", str(len(dato)))
         self.send_header("Content-Disposition",
-                         "inline; filename=\"nota-%s.pdf\""
-                         % nota.get("settimana", "saldo"))
+                         "inline; filename=\"%s\"" % nome)
         self.send_header("Cache-Control", "no-store, private")
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Content-Security-Policy",
@@ -509,12 +549,16 @@ class Porta(BaseHTTPRequestHandler):
                     pronte[c] = round(sum(float(p.get("prezzo") or 0)
                                           for p in finite), 2)
             return self._pagina(veste_area.amministrazione(
-                plafond, conteggio.note(self.server.note), pronte, messaggio))
+                plafond, conteggio.note(self.server.note), pronte, messaggio,
+                fatture.fisco(self.server.dati),
+                fatture.pronto(self.server.dati),
+                fatture.elenco(self.server.fatture)))
         suo = conto.get("concessionaria", "")
         return self._pagina(veste_area.concessionaria(
             pratiche.elenco(self.server.pratiche, suo),
             conteggio.quanto_resta(self.server.dati, self.server.pratiche, suo),
-            conteggio.note(self.server.note, suo)))
+            conteggio.note(self.server.note, suo),
+            fatture.elenco(self.server.fatture, suo)))
 
     def _azione_area(self, strada: str) -> None:
         conto = self._conto()
@@ -564,6 +608,12 @@ class Porta(BaseHTTPRequestHandler):
             conteggio.segna_saldata(self.server.note, self.server.pratiche,
                                     str(pezzi.get("nota") or ""))
             return self._area("Saldo registrato: il plafond è tornato libero.")
+        if strada == "/area/fisco":
+            fatture.salva_fisco(self.server.dati,
+                                {k: v for k, v in pezzi.items()
+                                 if isinstance(v, str)})
+            guasto = fatture.pronto(self.server.dati)
+            return self._area(guasto or "Dati fiscali salvati.")
         if strada == "/area/conto":
             quale = str(pezzi.get("concessionaria") or "").strip().lower()
             if quale:
@@ -584,6 +634,37 @@ class Porta(BaseHTTPRequestHandler):
         self.do_GET()
 
 
+def _fai_battere(dati: Path, pratiche_dove: Path, note_dove: Path,
+                 fatture_dove: Path) -> None:
+    """Il filo che tiene l'ora: un giro all'ora, per sempre.
+
+    Un'ora e' il passo giusto per due appuntamenti che guardano il giorno
+    della settimana: piu' fitto non serve a niente, e piu' rado rischia di
+    saltare la finestra del sabato mattina se il server viene riavviato.
+
+    Il giro non deve MAI far cadere il filo: un guasto dentro un giro si
+    scrive e si aspetta il prossimo. Un orologio che si ferma alla prima
+    posta rifiutata e' un orologio che nessuno si accorge che e' fermo.
+    """
+    def battito():
+        while True:
+            try:
+                fatto = orologio.giro(dati, pratiche_dove, note_dove,
+                                      fatture_dove)
+                if any(fatto.values()):
+                    print("%s orologio: %s"
+                          % (time.strftime("%H:%M:%S"),
+                             json.dumps(fatto, ensure_ascii=False)),
+                          flush=True)
+            except Exception as e:                      # noqa: BLE001
+                print("%s orologio, guasto: %s"
+                      % (time.strftime("%H:%M:%S"), e), flush=True)
+            time.sleep(3600)
+
+    filo = threading.Thread(target=battito, daemon=True)
+    filo.start()
+
+
 def main() -> int:
     ragioni = argparse.ArgumentParser(description="Targhe")
     ragioni.add_argument("--porta", type=int, default=8073)
@@ -595,6 +676,13 @@ def main() -> int:
                          help="dove stanno le pratiche e i documenti")
     ragioni.add_argument("--note", default="dati/note",
                          help="dove stanno le note di saldo")
+    ragioni.add_argument("--fatture", default="dati/fatture",
+                         help="dove stanno le fatture")
+    ragioni.add_argument("--giro", action="store_true",
+                         help="fa UN giro dell'orologio e chiude: per la "
+                              "prova a mano, o per un cron esterno")
+    ragioni.add_argument("--senza-orologio", action="store_true",
+                         help="non far girare l'orologio (per il banco)")
     ragioni.add_argument("--finto", action="store_true",
                          help="parla col fornitore finto: non spende niente")
     detto = ragioni.parse_args()
@@ -632,6 +720,18 @@ def main() -> int:
     note_dove.mkdir(parents=True, exist_ok=True)
     os.chmod(note_dove, 0o700)
     server.note = note_dove
+    fatture_dove = Path(detto.fatture)
+    fatture_dove.mkdir(parents=True, exist_ok=True)
+    os.chmod(fatture_dove, 0o700)
+    server.fatture = fatture_dove
+
+    if detto.giro:
+        # Un giro solo e poi si chiude: serve a provarlo a mano, e a chi
+        # preferisce farlo battere da un cron di sistema invece che dal
+        # filo qui dentro.
+        fatto = orologio.giro(dati, pratiche_dove, note_dove, fatture_dove)
+        print(json.dumps(fatto, ensure_ascii=False, indent=2))
+        return 0
     if not conti.conti(dati):
         # Il primo conto non si puo' creare da dentro: senza
         # amministrazione non c'e' nessuno che possa farne una.
@@ -645,6 +745,8 @@ def main() -> int:
         print("ATTENZIONE: nessun token. Ogni ricerca fallirà con una "
               "frase che lo spiega. Si mette in TOKEN_VEICOLI, oppure si "
               "prova con --finto.", flush=True)
+    if not detto.senza_orologio:
+        _fai_battere(dati, pratiche_dove, note_dove, fatture_dove)
     print("Targhe su http://127.0.0.1:%d" % detto.porta, flush=True)
     try:
         server.serve_forever()
