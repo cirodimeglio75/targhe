@@ -37,14 +37,37 @@ echo "-- python3 $(python3 -c 'import sys;print(".".join(map(str,sys.version_inf
 # programmi sulla stessa porta vuol dire che uno dei due non parte piu', e
 # scoprirlo dopo, su una macchina che ha gia' roba in funzione, e' il modo
 # di spegnere qualcosa che funzionava.
-CHI_PORTA=$(ss -ltnp 2>/dev/null | awk -v p=":$PORTA" '$4 ~ p"$" {print $NF}' | head -1)
+chi_tiene() {
+	ss -ltnp 2>/dev/null | awk -v p=":$1" '$4 ~ p"$" {print $NF}' | head -1
+}
+prima_libera() {
+	local p
+	for p in $(seq 8073 8199); do
+		[ -z "$(chi_tiene "$p")" ] && { echo "$p"; return; }
+	done
+}
+
+if [ "$PORTA" = "auto" ]; then
+	PORTA=$(prima_libera)
+	[ -n "$PORTA" ] || { echo "Nessuna porta libera fra 8073 e 8199." >&2; exit 1; }
+	echo "-- porta scelta da sola: $PORTA"
+fi
+
+CHI_PORTA=$(chi_tiene "$PORTA")
 if [ -n "$CHI_PORTA" ]; then
 	if echo "$CHI_PORTA" | grep -q "$NOME"; then
 		echo "-- porta $PORTA: la tiene gia' Targhe, la riprendo"
 	else
+		# Suggerire un numero a caso e' inutile: su questa macchina puo'
+		# essere occupato pure quello. Se ne cerca uno VERO, adesso.
+		LIBERA=$(prima_libera)
 		echo "La porta $PORTA e' gia' occupata da: $CHI_PORTA" >&2
-		echo "Scegline un'altra, per esempio:" >&2
-		echo "    PORTA=8074 bash deploy/installa.sh" >&2
+		if [ -n "$LIBERA" ]; then
+			echo "La prima libera su questa macchina e' la $LIBERA:" >&2
+			echo "    PORTA=$LIBERA bash deploy/installa.sh" >&2
+			echo "oppure lascia scegliere a me:" >&2
+			echo "    PORTA=auto bash deploy/installa.sh" >&2
+		fi
 		exit 1
 	fi
 fi

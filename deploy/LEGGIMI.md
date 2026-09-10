@@ -71,10 +71,12 @@ Poi, una volta sola:
 
 `controlla.sh` lo dice. Due casi:
 
-- **la porta 8073 è già occupata**: si sceglie un'altra, e l'installazione
-  la usa dappertutto (unità di sistema e Caddy):
+- **la porta 8073 è già occupata**: lo script cerca lui la prima libera e
+  te la dice, oppure sceglie da solo:
 
-      PORTA=8074 bash deploy/installa.sh
+      PORTA=auto bash deploy/installa.sh
+
+  Il numero scelto vale dappertutto: unità di sistema e file di Caddy.
 
 - **Caddy gira già**: bene, non va reinstallato. Lo script scrive solo il
   file del sito nuovo e lascia il resto com'è.
