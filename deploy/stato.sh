@@ -55,6 +55,29 @@ fi
 systemctl is-active --quiet caddy 2>/dev/null \
 	&& echo "-- Caddy: in piedi" || echo "-- Caddy: fermo"
 
+# La configurazione e' valida? Se non lo e', Caddy sta ancora servendo la
+# vecchia e la riga nuova non e' mai entrata in funzione.
+if command -v caddy >/dev/null; then
+	if caddy validate --config /etc/caddy/Caddyfile >/dev/null 2>&1; then
+		echo "-- la configurazione di Caddy: valida"
+	else
+		echo "-- la configurazione di Caddy: NON valida"
+		caddy validate --config /etc/caddy/Caddyfile 2>&1 | sed 's/^/   /' | head -6
+	fi
+fi
+
+# La prova che divide in due il problema: si bussa a Caddy da DENTRO la
+# macchina, dicendogli il nome del sito. Se di qui risponde, Caddy e il
+# certificato stanno bene e il guaio e' fuori (firewall, o il nome visto
+# da internet). Se non risponde, il guaio e' qui.
+DENTRO=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 10 \
+	--resolve "$SITO:443:127.0.0.1" "https://$SITO/" 2>&1)
+echo "-- da dentro la macchina, con SNI: $DENTRO"
+if [ "$DENTRO" = "000" ]; then
+	echo "   (Caddy non presenta un certificato per questo nome: o non ha"
+	echo "    ancora finito di prenderlo, o non conosce il sito)"
+fi
+
 # --- da fuori
 FUORI=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 10 \
 	"https://$SITO/" 2>&1)
@@ -84,6 +107,12 @@ if grep -q '^SERVER_POSTA=.\+' /etc/$NOME/ambiente 2>/dev/null; then
 else
 	echo "-- posta: non configurata (note e solleciti non partiranno)"
 fi
+
+echo
+echo "Cosa dice Caddy di questo sito:"
+journalctl -u caddy --no-pager --lines=200 2>/dev/null \
+	| grep -i -e "$SITO" -e "certificate" -e "acme" -e "error" \
+	| tail -8 | sed 's/^/   /' || echo "   (niente)"
 
 echo
 echo "Gli ultimi respiri del programma:"
