@@ -127,13 +127,19 @@ def main():
     deve(len(allegati) == 1
          and allegati[0].get_filename() == "estratto-conto.pdf",
          "con l'estratto conto attaccato")
-    import pymupdf
-    (DOVE / "estratto.pdf").write_bytes(allegati[0].get_payload(decode=True))
-    letto = pymupdf.open(DOVE / "estratto.pdf")[0].get_text()
-    deve("Estratto conto" in letto and "SCADUTA" in letto,
-         "e dentro c'è scritto quali sono scadute")
-    deve("1.560" in letto or "1560" in letto,
-         "col totale dovuto di tutte le note aperte")
+    try:
+        import pymupdf
+    except ImportError:
+        pymupdf = None
+        print("  --  (salto la lettura del PDF: pymupdf non c'è su questa "
+              "macchina)")
+    if pymupdf is not None:
+        (DOVE / "estratto.pdf").write_bytes(allegati[0].get_payload(decode=True))
+        letto = pymupdf.open(DOVE / "estratto.pdf")[0].get_text()
+        deve("Estratto conto" in letto and "SCADUTA" in letto,
+             "e dentro c'è scritto quali sono scadute")
+        deve("1.560" in letto or "1560" in letto,
+             "col totale dovuto di tutte le note aperte")
 
     print("\ne non si sollecita ogni ora")
     fatto = giro(tardi + 3600)

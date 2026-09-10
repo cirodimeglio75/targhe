@@ -242,13 +242,24 @@ def main():
     dove_pdf.write_bytes(dato)
     # Si legge col lettore di PDF, non guardando i byte: quel che conta e'
     # che il documento si APRA e dica le cose giuste a chi lo riceve.
-    import pymupdf
-    letto = "\n".join(p.get_text() for p in pymupdf.open(dove_pdf))
-    deve("Nota di saldo" in letto and "670,00" in letto
-         and "Autosalone Rossi" in letto,
-         "e un lettore di PDF ci legge dentro nome, righe e totale")
-    deve("entro lunedì" in letto,
-         "con scritto entro quando si salda, come vuole l'accordo")
+    #
+    # Il lettore pero' e' una libreria in piu', e sul SERVER non c'e' —
+    # questo banco gira anche prima di ogni aggiornamento, e non deve
+    # bloccarlo per una libreria da banco di prova. Dove manca, si salta
+    # e si dice.
+    try:
+        import pymupdf
+    except ImportError:
+        pymupdf = None
+        print("  --  (salto la lettura del PDF: pymupdf non c'è su questa "
+              "macchina)")
+    if pymupdf is not None:
+        letto = "\n".join(p.get_text() for p in pymupdf.open(dove_pdf))
+        deve("Nota di saldo" in letto and "670,00" in letto
+             and "Autosalone Rossi" in letto,
+             "e un lettore di PDF ci legge dentro nome, righe e totale")
+        deve("entro lunedì" in letto,
+             "con scritto entro quando si salda, come vuole l'accordo")
     codice, corpo, _ = chiedi("/nota/%s.pdf" % nota["id"], bianchi)
     deve(codice == 404, "un'altra concessionaria non lo apre")
     codice, corpo, _ = chiedi("/nota/%s.pdf" % nota["id"])
