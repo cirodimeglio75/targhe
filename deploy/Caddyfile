@@ -6,17 +6,12 @@
 
 agenzia.stopandgogaranzie.it {
 	# Il programma ascolta solo su 127.0.0.1: da fuori si passa di qui.
-	reverse_proxy 127.0.0.1:8073 {
-		# `header_up` vale SOLO dentro reverse_proxy: scritto fuori,
-		# `caddy validate` rifiuta tutto il file — ed e' quel che e'
-		# successo la prima volta, lasciando il sito senza certificato.
-		#
-		# Senza questa intestazione il biscotto della sessione esce
-		# senza `Secure`: il programma guarda proprio lei per capire
-		# se davanti c'e' HTTPS. Caddy la mette gia' da sola, ed e'
-		# scritta qui perche' si veda.
-		header_up X-Forwarded-Proto {scheme}
-	}
+	#
+	# Non c'e' nessun `header_up X-Forwarded-Proto`: Caddy la manda gia'
+	# da solo, e scriverla a mano gli fa dire «Unnecessary». Serve al
+	# programma per capire che davanti c'e' HTTPS e mettere `Secure` sul
+	# biscotto della sessione — ma arriva senza che si chieda.
+	reverse_proxy 127.0.0.1:8073
 
 	# Un documento d'identita' non si mette in nessuna memoria di
 	# passaggio.

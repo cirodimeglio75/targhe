@@ -42,7 +42,20 @@ fi
 
 # --- Caddy davanti
 if [ -f "/etc/caddy/$SITO.caddy" ]; then
-	echo "-- il file del sito: c'e' (/etc/caddy/$SITO.caddy)"
+	PERMESSI=$(stat -c '%a %U:%G' "/etc/caddy/$SITO.caddy" 2>/dev/null)
+	echo "-- il file del sito: c'e' ($PERMESSI)"
+	# Se Caddy non lo puo' leggere, `validate` da root passa lo stesso e
+	# il ricaricamento fallisce: il caso piu' difficile da indovinare.
+	UTENTE_CADDY=$(systemctl show -p User --value caddy 2>/dev/null)
+	UTENTE_CADDY=${UTENTE_CADDY:-caddy}
+	if id "$UTENTE_CADDY" >/dev/null 2>&1; then
+		if sudo -u "$UTENTE_CADDY" test -r "/etc/caddy/$SITO.caddy" 2>/dev/null; then
+			echo "   e l'utente $UTENTE_CADDY lo puo' leggere"
+		else
+			echo "   MA l'utente $UTENTE_CADDY NON lo puo' leggere:"
+			echo "      chmod 644 /etc/caddy/$SITO.caddy"
+		fi
+	fi
 else
 	echo "-- il file del sito: MANCA"
 fi

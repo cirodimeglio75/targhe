@@ -111,7 +111,13 @@ if [ -d /etc/caddy ]; then
 	sed -e "s|agenzia.stopandgogaranzie.it|$SITO|" \
 	    -e "s|127.0.0.1:8073|127.0.0.1:$PORTA|" \
 	    "$QUI/deploy/Caddyfile" > "$PEZZO"
-	echo "-- scritto $PEZZO"
+	# Il file lo deve poter leggere l'utente di CADDY, non solo root:
+	# `caddy validate` gira da root e passa, ma il ricaricamento lo fa
+	# Caddy con l'utente suo, e su una macchina con umask stretta il
+	# file nasce illeggibile per lui — il reload fallisce senza dire
+	# perche'.
+	chmod 644 "$PEZZO"
+	echo "-- scritto $PEZZO (leggibile da Caddy)"
 	if grep -q "import $PEZZO" /etc/caddy/Caddyfile 2>/dev/null; then
 		echo "-- il Caddyfile lo importa gia'"
 		if caddy validate --config /etc/caddy/Caddyfile >/dev/null 2>&1; then
