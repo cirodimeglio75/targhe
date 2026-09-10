@@ -1,6 +1,17 @@
 # Mettere Targhe sul server
 
-Per `agenzia.stopandgogaranzie.it`. Tre comandi, da root, sulla macchina.
+Per `agenzia.stopandgogaranzie.it`.
+
+## Prima di tutto: questi comandi vanno dati SUL SERVER
+
+Non sul Mac. Sul Mac `/root` non esiste nemmeno, e il `sudo` chiede la
+password del Mac, che col server non c'entra niente. Dal Terminale del Mac
+si entra nel server così, e **solo dopo** si danno i comandi:
+
+    ssh root@62.238.104.99
+
+Da lì in poi tutto quello che segue è dentro quella finestra: il segno del
+prompt cambia, e non dice più `MacBook-Pro-di-Ciro`.
 
 ## Prima di cominciare
 
@@ -12,11 +23,36 @@ Per `agenzia.stopandgogaranzie.it`. Tre comandi, da root, sulla macchina.
   altra dipendenza: usa solo la libreria che viene con Python, e nemmeno per
   fare i PDF.
 
-## I tre comandi
+## Il repository è privato: prima la chiave
 
-    git clone https://github.com/cirodimeglio75/targhe /root/targhe
+Il server non ha un conto GitHub, quindi un `git clone` con l'indirizzo
+`https://` gli chiederebbe una password che non ha. Si fa una chiave, una
+volta sola, e poi funziona per sempre — anche per gli aggiornamenti:
+
+    ssh-keygen -t ed25519 -C "server targhe" -f /root/.ssh/id_targhe -N ""
+    cat /root/.ssh/id_targhe.pub
+
+Quella riga che stampa si incolla su GitHub, nel repository `targhe`:
+**Settings → Deploy keys → Add deploy key**. Titolo qualsiasi, spunta
+«Allow write access» NON serve. Poi, sempre sul server:
+
+    printf 'Host github.com\n  IdentityFile /root/.ssh/id_targhe\n' >> /root/.ssh/config
+
+## I tre comandi (sul server)
+
+    git clone git@github.com:cirodimeglio75/targhe.git /root/targhe
     cd /root/targhe
-    sudo bash deploy/installa.sh
+    bash deploy/controlla.sh        # guarda e basta, non cambia niente
+    bash deploy/installa.sh         # questo installa
+
+### La strada corta, se il Mac ha già GitHub
+
+Se sul Mac il repository ce l'hai già, invece della chiave puoi copiarlo:
+
+    git clone https://github.com/cirodimeglio75/targhe ~/targhe
+    scp -r ~/targhe root@62.238.104.99:/root/targhe
+
+E poi entrare col `ssh` e continuare da `bash deploy/controlla.sh`.
 
 Poi, una volta sola:
 
